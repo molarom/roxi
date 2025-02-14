@@ -1,0 +1,115 @@
+// Copyright 2025 Brandon Epperson
+// SPDX-License-Identifier: Apache-2.0
+
+package roxi
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+)
+
+// Responder represents a web response.
+type Responder interface {
+	Encode() (data []byte, contentType string, err error)
+}
+
+// HTTPStatuser is an optional interface for a response to implement for
+// setting status codes other than the default 200.
+type HTTPStatuser interface {
+	StatusCode() int
+}
+
+// NoContent is a helper responder for 204 responses.
+var NoContent = emptyResponse{http.StatusNoContent}
+
+// Default error response handlers
+var (
+	// NotFound is a default 404 handler
+	NotFound = func(ctx context.Context, r *http.Request) error {
+		return Respond(ctx, notFound{})
+	}
+
+	// MethodNotAllowed is a default 405 handler.
+	MethodNotAllowed = func(ctx context.Context, r *http.Request) error {
+		return Respond(ctx, errorResponse{http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed)})
+	}
+
+	// MethodNotAllowed is a default 500 handler.
+	InternalServerError = func(ctx context.Context, r *http.Request) error {
+		return Respond(ctx, errorResponse{http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError)})
+	}
+)
+
+// Respond sets the appropriate http headers and writes a response to
+// the http.ResponseWriter in the context.
+//
+// It should be called as the return of a HandlerFunc.
+//
+// Example:
+//
+//	func Handler(ctx context.Context, r *http.Request) error {
+//	    return Respond(ctx, NoContent)
+//	}
+func Respond(ctx context.Context, data Responder) error {
+	if data == nil {
+		return fmt.Errorf("respond: data is nil")
+	}
+
+	w := GetWriter(ctx)
+
+	switch v := data.(type) {
+	case emptyResponse:
+		w.WriteHeader(v.StatusCode())
+		return nil
+	}
+
+	v, ct, err := data.Encode()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return err
+	}
+
+	w.Header().Set("Content-Type", ct)
+	if s, ok := data.(HTTPStatuser); ok {
+		w.WriteHeader(s.StatusCode())
+	}
+
+	w.Write(v)
+
+	return nil
+}
+
+// Redirect wraps http.Redirect to send an http.Redirect response.
+func Redirect(ctx context.Context, r *http.Request, url string, code int) error {
+	http.Redirect(GetWriter(ctx), r, url, code)
+	return nil
+}
+
+// ----------------------------------------------------------------------
+// helper types
+
+type emptyResponse struct {
+	code int
+}
+
+func (r emptyResponse) Encode() ([]byte, string, error) {
+	return nil, "", nil
+}
+
+func (r emptyResponse) StatusCode() int {
+	return r.code
+}
+
+type errorResponse struct {
+	code    int
+	message string
+}
+
+func (r errorResponse) Encode() ([]byte, string, error) {
+	return toBytes(r.message), "text/plain", nil
+}
+
+func (r errorResponse) StatusCode() int {
+	return r.code
+}
