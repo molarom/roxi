@@ -1,30 +1,66 @@
-// Copyright 2025 Brandon Epperson
-// SPDX-License-Identifier: Apache-2.0
-
-// Package roxi represents an http.Handler and associated framework.
+// Package roxi is a lightweight http multiplexer.
 //
-// The mux was inspired by Julien Schmidt's httprouter and Daniel Imfeld's
-// httptreemux. The aim was to as close as possible to performance of httprouter,
-// but maintain much of the flexibility of routing patterns in httptreemux.
+// This package borrows inspiration from Julien Schmidt's httprouter and Daniel Imfeld's
+// httptreemux. It still makes use of a PATRICA tree, but the implementation differs from both.
 //
-// The routing rules are the same as httptreemux, with the exception of
-// supporting routes that escape the param and wildcard characters.
+// The aim was to have a mux that mets the following requirements:
 //
-// TODO: add routing examples.
+// 1. A path segment may be variable in one route and a static token in another.
+// 2. Path values can be retrieved with r.PathValue(<var>)
+// 3. HandlerFunc's accept a context.Context parameter and can return errors.
+// 4. Keep mux configuration simple.
+// 5. Be as performant and memory efficent as possible.
 //
-// This mux also makes use of the routing wildcard feature introduced in
-// go 1.22 over a custom Param implementation, allowing param and wildcard
-// variables to be retrieved with `r.PathValue('<var_name>')`.
+// There are some additional methods included in this package that may optionally be used
+// to improve developer experience, such as Decode and Respond for handling request
+// and response data respectively. These components were inspired by Bill Kennedy's Service project.
 //
-// The framework components were inspired by Bill Kennedy's Service framework.
+// Minimal Example:
+//
+// package main
+//
+// import (
+//
+//	"context"
+//	"log"
+//	"net/http"
+//
+//	"gitlab.com/romalor/roxi"
+//
+// )
+//
+// type HomePage []byte
+//
+//	func (r HomePage) Encode() ([]byte, string, error) {
+//		return r, "text/plain; charset=utf-8", nil
+//	}
+//
+//	func Root(ctx context.Context, r *http.Request) error {
+//		return roxi.Redirect(ctx, r, "/home", 301)
+//	}
+//
+//	func Home(ctx context.Context, r *http.Request) error {
+//		return roxi.Respond(ctx, HomePage("Welcome!"))
+//	}
+//
+//	func main() {
+//		mux := roxi.New()
+//
+//		mux.GET("/", Root)
+//		mux.GET("/home", Home)
+//
+//		log.Fatal(http.ListenAndServe(":8080", mux))
+//	}
 package roxi
 
 import (
 	"bytes"
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 // HandlerFunc represents a function to handle HTTP requests.
@@ -38,8 +74,10 @@ type HandlerFunc func(ctx context.Context, r *http.Request) error
 func (f HandlerFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Setup context.
 	ctx := r.Context()
-	ctx = setWriter(ctx, w)
-	f(ctx, r)
+	ctx = &writerContext{ctx, writerKey, w}
+
+	// TODO: evaluate what best behavior would be here.
+	_ = f(ctx, r)
 }
 
 // Logger represents a function used by the Mux to log internal events.
@@ -62,16 +100,24 @@ type Mux struct {
 	methodNotAllowed http.Handler
 	notFound         http.Handler
 	errHandler       http.Handler
+
+	// pool for writerContext
+	ctxPool sync.Pool
 }
 
-// New returns a new Mux.
-func New(log Logger, opts ...func(*Mux)) *Mux {
+// New returns a new initalized Mux. No options are configured other than the default error handlers.
+func New(opts ...func(*Mux)) *Mux {
 	m := &Mux{
-		log:              log,
+		log:              log.Printf,
 		trees:            make(map[string]*node),
 		methodNotAllowed: HandlerFunc(MethodNotAllowed),
 		notFound:         HandlerFunc(NotFound),
 		errHandler:       HandlerFunc(InternalServerError),
+		ctxPool: sync.Pool{
+			New: func() any {
+				return new(writerContext)
+			},
+		},
 	}
 
 	for _, o := range opts {
@@ -80,8 +126,36 @@ func New(log Logger, opts ...func(*Mux)) *Mux {
 	return m
 }
 
+// NewWithDefaults is a helper method to return a mux with default options enabled.
+//
+// It is equivalent to calling:
+//
+//	 New(
+//			WithSetAllowHeader(),
+//			WithRedirectCleanPath(),
+//			WithRedirectTrailingSlash(),
+//			WithPanicHandler(DefaultPanicHandler),
+//			WithOptionsHandler(HandlerFunc(DefaultCORS)),
+//		)
+func NewWithDefaults() *Mux {
+	return New(
+		WithSetAllowHeader(),
+		WithRedirectCleanPath(),
+		WithRedirectTrailingSlash(),
+		WithPanicHandler(DefaultPanicHandler),
+		WithOptionsHandler(HandlerFunc(DefaultCORS)),
+	)
+}
+
 // ----------------------------------------------------------------------
 // Mux options
+
+// WithLogger replaces the mux's internal logger. By default, it calls log.Printf.
+func WithLogger(log Logger) func(*Mux) {
+	return func(m *Mux) {
+		m.log = log
+	}
+}
 
 // WithMiddleware registers global middleware for the mux to execute.
 func WithMiddleware(mw ...MiddlewareFunc) func(*Mux) {
@@ -104,10 +178,10 @@ func WithPanicHandler(handler PanicHandler) func(*Mux) {
 //
 // It is equivalent to calling:
 //
-//	m.Handler("OPTIONS", "/", handler)
+//	m.Handler("OPTIONS", "/*path", handler)
 func WithOptionsHandler(handler http.Handler) func(*Mux) {
 	return func(m *Mux) {
-		m.Handler("OPTIONS", "/", handler)
+		m.Handler("OPTIONS", "/*path", handler)
 	}
 }
 
@@ -134,21 +208,21 @@ func WithRedirectCleanPath() func(*Mux) {
 	}
 }
 
-// WithNotAllowedResponse sets a Handler to be executed for 405 responses.
+// WithMethodNotAllowedHandler replaces the default 405 response handler.
 func WithMethodNotAllowedHandler(handler http.Handler) func(*Mux) {
 	return func(m *Mux) {
 		m.methodNotAllowed = handler
 	}
 }
 
-// WithNotFoundResponse sets a Handler to executed for 404 responses.
+// WithNotFoundResponse replaces the default 404 response handler.
 func WithNotFoundHandler(handler http.Handler) func(*Mux) {
 	return func(m *Mux) {
 		m.notFound = handler
 	}
 }
 
-// WithErrorResponse sets a Handler to be executed for 500 responses.
+// WithErrorResponse replaces the default 500 response handler.
 func WithErrorHandler(handler http.Handler) func(*Mux) {
 	return func(m *Mux) {
 		m.errHandler = handler
@@ -161,13 +235,16 @@ func WithErrorHandler(handler http.Handler) func(*Mux) {
 // ServeHTTP implements the http.Handler interface.
 func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Setup context.
-	ctx := r.Context()
-	ctx = setWriter(ctx, w)
+	ctx := m.ctxPool.Get().(*writerContext)
+	ctx.Context = r.Context()
+	ctx.key = writerKey
+	ctx.value = w
+	defer m.ctxPool.Put(ctx)
 
 	if m.panicHandler != nil {
 		defer func() {
 			if rec := recover(); rec != nil {
-				m.log("recovered panic", "panic", rec)
+				m.log("recovered panic: %v", rec)
 				m.panicHandler(ctx, r, rec)
 			}
 		}()
@@ -211,7 +288,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if handler, found := root.search(path, r); found {
 		if err := handler(ctx, r); err != nil {
-			m.log("error executing handler", "error", err)
+			m.log("executing handler: %s", err)
 			m.errHandler.ServeHTTP(w, r)
 		}
 		return
@@ -242,18 +319,27 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// found a match, redirect to correct path.
 			if _, found := root.search(path, r); found {
 				r.URL.Path = toString(path)
-				Redirect(ctx, r, r.URL.String(), code)
+				_ = Redirect(ctx, r, r.URL.String(), code)
 				return
 			}
 		}
 	}
 
-	m.methodNotAllowed.ServeHTTP(w, r)
+	m.notFound.ServeHTTP(w, r)
 }
 
 // Handler registers an http.Handler to handle requests at the given
 // method and path.
 func (m *Mux) Handler(method, path string, handler http.Handler, mw ...MiddlewareFunc) {
+	m.Handle(method, path, func(ctx context.Context, r *http.Request) error {
+		handler.ServeHTTP(GetWriter(ctx), r)
+		return nil
+	}, mw...)
+}
+
+// HandlerFunc registers an http.HandlerFunc to handle requests at the given
+// method and path.
+func (m *Mux) HandlerFunc(method, path string, handler http.HandlerFunc, mw ...MiddlewareFunc) {
 	m.Handle(method, path, func(ctx context.Context, r *http.Request) error {
 		handler.ServeHTTP(GetWriter(ctx), r)
 		return nil
@@ -273,6 +359,14 @@ func (m *Mux) Handle(method, path string, handlerFunc HandlerFunc, mw ...Middlew
 		panic("method '" + method + "' is not a valid http method")
 	}
 
+	if len(path) == 0 {
+		panic("cannot register empty path")
+	}
+
+	if len(path) > 0 && path[0] != '/' {
+		panic("path '" + path + "' does not begin with '/'")
+	}
+
 	if handlerFunc == nil {
 		panic("handlerfunc cannot be nil")
 	}
@@ -289,7 +383,42 @@ func (m *Mux) Handle(method, path string, handlerFunc HandlerFunc, mw ...Middlew
 	root.insert([]byte(path), handlerFunc)
 }
 
-// PrintRoutes prints all of the registered routes on the Mux.
+// GET is a helper method for m.Handle("GET", path, handlerFunc, mw...)
+func (m *Mux) GET(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc) {
+	m.Handle("GET", path, handlerFunc, mw...)
+}
+
+// HEAD is a helper method for m.Handle("HEAD", path, handlerFunc, mw...)
+func (m *Mux) HEAD(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc) {
+	m.Handle("HEAD", path, handlerFunc, mw...)
+}
+
+// POST is a helper method for m.Handle("POST", path, handlerFunc, mw...)
+func (m *Mux) POST(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc) {
+	m.Handle("POST", path, handlerFunc, mw...)
+}
+
+// PUT is a helper method for m.Handle("PUT", path, handlerFunc, mw...)
+func (m *Mux) PUT(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc) {
+	m.Handle("PUT", path, handlerFunc, mw...)
+}
+
+// PATCH is a helper method for m.Handle("PATCH", path, handlerFunc, mw...)
+func (m *Mux) PATCH(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc) {
+	m.Handle("PATCH", path, handlerFunc, mw...)
+}
+
+// DELETE is a helper method for m.Handle("DELETE", path, handlerFunc, mw...)
+func (m *Mux) DELETE(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc) {
+	m.Handle("DELETE", path, handlerFunc, mw...)
+}
+
+// OPTIONS is a helper method for m.Handle("OPTIONS", path, handlerFunc, mw...)
+func (m *Mux) OPTIONS(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc) {
+	m.Handle("OPTIONS", path, handlerFunc, mw...)
+}
+
+// PrintTree prints the contents of the routing tree.
 func (m *Mux) PrintRoutes() {
 	for k, v := range m.trees {
 		fmt.Printf("[%s]\n", k)

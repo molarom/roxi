@@ -1,14 +1,23 @@
-run:
-	go run main.go
+deps:
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.5
+	go install mvdan.cc/gofumpt@latest
 
-tidy:
-	go mod tidy
+fmt:
+	gofumpt -l -w
+
+ci-lint:
+	golangci-lint run
+
+lint: fmt ci-lint
 
 test:
-	CGO_ENABLED=0 go test -v ./...
+	CGO_ENABLED=0 go test .
 
-bench: enwiki-latest-all-titles-in-ns0.gz
-	go test -v ./... -bench=. -benchmem
+test-race:
+	CGO_ENABLED=1 go test -race .
 
-enwiki-latest-all-titles-in-ns0.gz:
-	curl https://dumps.wikimedia.org/enwiki/latest/enwiki-latest-all-titles-in-ns0.gz -o enwiki-latest-all-titles-in-ns0.gz
+bench:
+	CGO_ENABLED=0 go test -bench=. -benchmem
+
+cover:
+	CGO_ENABLED=0 go test -cover
