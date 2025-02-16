@@ -1,0 +1,32 @@
+image: golang:1.23
+
+stages:
+  - lint
+  - test
+
+before_script:
+  - apt update -y && apt install -y make
+  - go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.5
+  - go install mvdan.cc/gofumpt@latest
+
+lint:
+  stage: lint
+  script:
+    - gofumpt -d
+    - golangci-lint run
+
+test:
+  stage: test
+  script:
+    - make test
+
+test-race:
+  stage: test
+  script:
+    - make test-race
+
+coverage:
+  stage: test
+  script:
+    - make cover
+  coverage: '/coverage: \d+.\d+% of statements/'

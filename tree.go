@@ -199,6 +199,12 @@ func (n *node) search(key []byte, r *http.Request) (HandlerFunc, bool) {
 		break
 	}
 
+	// if we didn't land on a param and the
+	// key hasn't been exhausted, it's not a match.
+	if !current.param && keyLen != 0 {
+		return current.value, false
+	}
+
 	return current.value, current.leaf
 }
 

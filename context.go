@@ -14,13 +14,18 @@ const (
 	writerKey ctxKey = iota
 )
 
-// setWriter adds an http.ResponseWriter to the context.
-func setWriter(ctx context.Context, w http.ResponseWriter) context.Context {
-	if _, ok := ctx.Value(writerKey).(http.ResponseWriter); !ok {
-		return context.WithValue(ctx, writerKey, w)
-	}
+// writerContext stores the http.ResponseWriter to pass to HandlerFuncs.
+type writerContext struct {
+	context.Context
+	key   ctxKey
+	value http.ResponseWriter
+}
 
-	return ctx
+func (c *writerContext) Value(key any) any {
+	if key == c.key {
+		return c.value
+	}
+	return c.Context.Value(key)
 }
 
 // GetWriter returns the http.ResponseWriter from the context.

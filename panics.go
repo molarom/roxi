@@ -12,7 +12,7 @@ import (
 // occur during the lifecycle of the mux.
 type PanicHandler func(ctx context.Context, r *http.Request, err interface{})
 
-// TODO: Add panic page.
+// DefaultPanicHandler is an optional handler that executes when a panic is recovered.
 var DefaultPanicHandler = func(ctx context.Context, r *http.Request, err interface{}) {
 	GetWriter(ctx).WriteHeader(http.StatusInternalServerError)
 }

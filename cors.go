@@ -42,7 +42,7 @@ var defaultCORS = CORS{
 	Vary:    false,
 }
 
-// DefaultCORS is an OPTIONS handler with reasonable defaults set for responding to preflight requests.
+// DefaultCORS is an optional OPTIONS handler with reasonable defaults set for responding to preflight requests.
 //
 // Values Set:
 //
