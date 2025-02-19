@@ -466,7 +466,7 @@ func checkFSPath(path string) {
 	}
 
 	if path[len(path)-6:] != "/*file" {
-		panic("file server path must end in '*/file'")
+		panic("file server path must end in '/*file'")
 	}
 }
 
