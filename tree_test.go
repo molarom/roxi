@@ -17,11 +17,12 @@ var emptyHandler = func(ctx context.Context, r *http.Request) error {
 
 func Test_ParseParams(t *testing.T) {
 	tests := []struct {
-		name   string
-		wcPath string
-		path   string
-		params []string
-		ok     bool
+		name    string
+		wcPath  string
+		path    string
+		params  []string
+		lastIdx int
+		ok      bool
 	}{
 		{
 			"Parse",
@@ -31,6 +32,7 @@ func Test_ParseParams(t *testing.T) {
 				"with",
 				"param",
 			},
+			15,
 			true,
 		},
 		{
@@ -38,6 +40,7 @@ func Test_ParseParams(t *testing.T) {
 			"/user/group/:group_id",
 			"/user/group",
 			[]string{},
+			11,
 			false,
 		},
 		{
@@ -45,6 +48,7 @@ func Test_ParseParams(t *testing.T) {
 			":path",
 			"foo/bar",
 			[]string{},
+			3,
 			false,
 		},
 		{
@@ -52,6 +56,23 @@ func Test_ParseParams(t *testing.T) {
 			"foo/:bar",
 			"foo/bar",
 			[]string{"bar"},
+			7,
+			true,
+		},
+		{
+			"ParseWithTrailingSlash",
+			":bar/",
+			"foo/",
+			[]string{"bar"},
+			4,
+			true,
+		},
+		{
+			"ParseMatchPartialMiddle",
+			"/path/:bar/b",
+			"/path/s/baz",
+			[]string{"bar"},
+			9,
 			true,
 		},
 		{
@@ -59,6 +80,7 @@ func Test_ParseParams(t *testing.T) {
 			"/path/*wildcard",
 			"/path/single",
 			[]string{"wildcard"},
+			11,
 			true,
 		},
 		{
@@ -66,6 +88,7 @@ func Test_ParseParams(t *testing.T) {
 			"/path/*wildcard",
 			"/path" + strings.Repeat("/path", 80),
 			[]string{"wildcard"},
+			404,
 			true,
 		},
 	}
@@ -73,8 +96,13 @@ func Test_ParseParams(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := &http.Request{}
-			if ok := parseParams([]byte(tt.wcPath), []byte(tt.path), req); ok != tt.ok {
+			lastIdx, ok := parseParams([]byte(tt.wcPath), []byte(tt.path), req)
+			if ok != tt.ok {
 				t.Errorf("expected: [%v]; got [%v]", tt.ok, ok)
+			}
+
+			if lastIdx != tt.lastIdx {
+				t.Errorf("expected: [%d]; got [%d]", tt.lastIdx, lastIdx)
 			}
 
 			// Check path value gets set correctly.
@@ -125,6 +153,9 @@ func Test_Tree(t *testing.T) {
 	tree.insert([]byte("/lib/books/:book"), emptyHandler)
 	tree.insert([]byte("/users/add/:user_id"), emptyHandler)
 	tree.insert([]byte("/:path"), emptyHandler)
+	tree.insert([]byte("/users/:id/app"), emptyHandler)
+	tree.insert([]byte("/users/:id/settings"), emptyHandler)
+	tree.insert([]byte("/users/:id/show"), emptyHandler)
 
 	// Inserts
 
@@ -206,6 +237,22 @@ func Test_Tree(t *testing.T) {
 			true,
 		},
 		{
+			"MatchParamIdStaticRemainder1",
+			"/users/1/settings",
+			[]string{
+				"id",
+			},
+			true,
+		},
+		{
+			"MatchParamIdStaticRemainder2",
+			"/users/1/app",
+			[]string{
+				"id",
+			},
+			true,
+		},
+		{
 			"MatchRootParam",
 			"/path1",
 			[]string{
@@ -278,4 +325,6 @@ func Test_Tree(t *testing.T) {
 			}
 		})
 	}
+
+	tree.print(0)
 }

@@ -1,56 +1,23 @@
+// Copyright 2025 Brandon Epperson
+// SPDX-License-Identifier: Apache-2.0
+
 // Package roxi is a lightweight http multiplexer.
 //
 // This package borrows inspiration from Julien Schmidt's httprouter and Daniel Imfeld's
-// httptreemux. It still makes use of a PATRICA tree, but the implementation differs from both.
+// httptreemux. It still makes use of a PATRICA tree, but the tree implementation differs from both.
 //
 // The aim was to have a mux that mets the following requirements:
 //
 // 1. A path segment may be variable in one route and a static token in another.
 // 2. Path values can be retrieved with r.PathValue(<var>)
 // 3. HandlerFunc's accept a context.Context parameter and can return errors.
-// 4. Keep mux configuration simple.
+// 4. Provide a simple mux-wide configuration.
 // 5. Be as performant and memory efficent as possible.
+// 6. Integrate well with net/http as well as any extension packages.
 //
 // There are some additional methods included in this package that may optionally be used
 // to improve developer experience, such as Decode and Respond for handling request
 // and response data respectively. These components were inspired by Bill Kennedy's Service project.
-//
-// Minimal Example:
-//
-// package main
-//
-// import (
-//
-//	"context"
-//	"log"
-//	"net/http"
-//
-//	"gitlab.com/romalor/roxi"
-//
-// )
-//
-// type HomePage []byte
-//
-//	func (r HomePage) Encode() ([]byte, string, error) {
-//		return r, "text/plain; charset=utf-8", nil
-//	}
-//
-//	func Root(ctx context.Context, r *http.Request) error {
-//		return roxi.Redirect(ctx, r, "/home", 301)
-//	}
-//
-//	func Home(ctx context.Context, r *http.Request) error {
-//		return roxi.Respond(ctx, HomePage("Welcome!"))
-//	}
-//
-//	func main() {
-//		mux := roxi.New()
-//
-//		mux.GET("/", Root)
-//		mux.GET("/home", Home)
-//
-//		log.Fatal(http.ListenAndServe(":8080", mux))
-//	}
 package roxi
 
 import (
@@ -59,6 +26,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	stdpath "path"
+	"regexp"
 	"strings"
 	"sync"
 )
@@ -71,13 +41,21 @@ import (
 type HandlerFunc func(ctx context.Context, r *http.Request) error
 
 // ServeHTTP implements the http.Handler interface.
+//
+// If a HandlerFunc is invoked with ServeHTTP and returns an error,
+// http.Error is called to return the error in the response text and set the
+// response code to 500.
+//
+// If this behavior is undesired, the error must be handled and set to nil
+// prior to it's return.
 func (f HandlerFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Setup context.
 	ctx := r.Context()
 	ctx = &writerContext{ctx, writerKey, w}
 
-	// TODO: evaluate what best behavior would be here.
-	_ = f(ctx, r)
+	if err := f(ctx, r); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // Logger represents a function used by the Mux to log internal events.
@@ -86,11 +64,13 @@ type Logger func(msg string, args ...any)
 // Mux represents an http.Handler for registering HandlerFuncs to handle
 // HTTP requests.
 type Mux struct {
-	log            Logger
-	trees          map[string]*node
-	mw             []MiddlewareFunc
-	panicHandler   PanicHandler
-	setAllowHeader bool
+	log   Logger
+	trees map[string]*node
+	mw    []MiddlewareFunc
+
+	// Routing
+	setAllowHeader       bool
+	routeCaseInsensitive bool
 
 	// Redirects
 	redirectTrailingSlash bool
@@ -101,11 +81,17 @@ type Mux struct {
 	notFound         http.Handler
 	errHandler       http.Handler
 
+	// Panics
+	panicHandler PanicHandler
+
 	// pool for writerContext
 	ctxPool sync.Pool
 }
 
-// New returns a new initalized Mux. No options are configured other than the default error handlers.
+// New returns a new initalized Mux.
+//
+// No options are configured other than the default error handlers.
+// This includes the omission of the default PanicHandler.
 func New(opts ...func(*Mux)) *Mux {
 	m := &Mux{
 		log:              log.Printf,
@@ -130,20 +116,22 @@ func New(opts ...func(*Mux)) *Mux {
 //
 // It is equivalent to calling:
 //
-//	 New(
-//			WithSetAllowHeader(),
-//			WithRedirectCleanPath(),
-//			WithRedirectTrailingSlash(),
-//			WithPanicHandler(DefaultPanicHandler),
-//			WithOptionsHandler(HandlerFunc(DefaultCORS)),
-//		)
-func NewWithDefaults() *Mux {
+// New(
+// 		WithSetAllowHeader(),
+// 		WithRedirectCleanPath(),
+// 		WithRedirectTrailingSlash(),
+// 		WithPanicHandler(DefaultPanicHandler),
+//      opts...,
+// )
+
+func NewWithDefaults(opts ...func(*Mux)) *Mux {
 	return New(
-		WithSetAllowHeader(),
-		WithRedirectCleanPath(),
-		WithRedirectTrailingSlash(),
-		WithPanicHandler(DefaultPanicHandler),
-		WithOptionsHandler(HandlerFunc(DefaultCORS)),
+		append([]func(*Mux){
+			WithSetAllowHeader(),
+			WithRedirectCleanPath(),
+			WithRedirectTrailingSlash(),
+			WithPanicHandler(DefaultPanicHandler),
+		}, opts...)...,
 	)
 }
 
@@ -189,6 +177,17 @@ func WithOptionsHandler(handler http.Handler) func(*Mux) {
 func WithSetAllowHeader() func(*Mux) {
 	return func(m *Mux) {
 		m.setAllowHeader = true
+	}
+}
+
+// WithRedirectCaseInsensitive enables case insensitive routing.
+//
+// Example:
+//
+// mux.GET("/FOO", handlerFunc) Matches: ("/FOO", "/foo", "/fOO", etc.)
+func WithCaseInsensitiveRouting() func(*Mux) {
+	return func(m *Mux) {
+		m.routeCaseInsensitive = true
 	}
 }
 
@@ -286,6 +285,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// search for handler
 	if handler, found := root.search(path, r); found {
 		if err := handler(ctx, r); err != nil {
 			m.log("executing handler: %s", err)
@@ -294,6 +294,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// don't redirect if proxy connection or root path are requested.
 	if r.Method != http.MethodConnect && !bytes.Equal(path, []byte{'/'}) {
 		// following the same redirect behavior as httprouter
 		code := http.StatusMovedPermanently
@@ -302,9 +303,13 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// check if any redirect behavior is enabled.
-		redirect := (m.redirectCleanPath || m.redirectTrailingSlash)
+		redirect := (m.redirectCleanPath || m.redirectTrailingSlash || m.routeCaseInsensitive)
 
 		// step through each enabled path scrubbing option
+		if m.routeCaseInsensitive {
+			path = toBytes(strings.ToLower(r.URL.Path))
+		}
+
 		if m.redirectCleanPath {
 			path = CleanPath(r.URL.Path)
 		}
@@ -319,12 +324,15 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// found a match, redirect to correct path.
 			if _, found := root.search(path, r); found {
 				r.URL.Path = toString(path)
+				m.log("redirecting to: %s", r.URL.Path)
 				_ = Redirect(ctx, r, r.URL.String(), code)
 				return
 			}
 		}
 	}
 
+	// not found case.
+	m.log("no matching route registered for: %s", r.URL.Path)
 	m.notFound.ServeHTTP(w, r)
 }
 
@@ -380,8 +388,90 @@ func (m *Mux) Handle(method, path string, handlerFunc HandlerFunc, mw ...Middlew
 
 	handlerFunc = MiddlewareStack(handlerFunc, mw...)
 	handlerFunc = MiddlewareStack(handlerFunc, m.mw...)
-	root.insert([]byte(path), handlerFunc)
+
+	if m.routeCaseInsensitive {
+		root.insert([]byte(strings.ToLower(path)), handlerFunc)
+	} else {
+		root.insert([]byte(path), handlerFunc)
+	}
 }
+
+// ----------------------------------------------------------------------
+// File Server methods
+
+// FileServer wraps http.FileServer to allow the mux's error handlers to be
+// called over the internal http.FileServer ones.
+//
+// The path must end in a wildcard with the name '*file'.
+func (m *Mux) FileServer(path string, fs http.FileSystem) {
+	// check path
+	checkFSPath(path)
+
+	fsrv := http.FileServer(fs)
+	m.GET(path, func(ctx context.Context, r *http.Request) error {
+		f := stdpath.Clean(r.PathValue("file"))
+		if _, err := fs.Open(f); err != nil {
+			if !os.IsNotExist(err) {
+				return err
+			}
+			m.notFound.ServeHTTP(GetWriter(ctx), r)
+		}
+
+		r.URL.Path = f
+		fsrv.ServeHTTP(GetWriter(ctx), r)
+		return nil
+	})
+}
+
+// FileServerRE serves files from the specified http.Dir but restricts
+// file lookups to require matching the specified regular expression.
+//
+// The path must end in a wildcard with the name '*file'.
+func (m *Mux) FileServerRE(path, regex string, fs http.FileSystem) {
+	// check path
+	checkFSPath(path)
+
+	re := regexp.MustCompile(regex)
+
+	fsrv := http.FileServer(fs)
+	m.GET(path, func(ctx context.Context, r *http.Request) error {
+		f := stdpath.Clean(r.PathValue("file"))
+		if !re.MatchString(f) {
+			m.log("regexp did not match: %s", f)
+			m.notFound.ServeHTTP(GetWriter(ctx), r)
+			return nil
+		}
+
+		if _, err := fs.Open(f); err != nil {
+			if !os.IsNotExist(err) {
+				return err
+			}
+			m.notFound.ServeHTTP(GetWriter(ctx), r)
+			return nil
+		}
+
+		r.URL.Path = f
+		fsrv.ServeHTTP(GetWriter(ctx), r)
+		return nil
+	})
+}
+
+func checkFSPath(path string) {
+	if len(path) == 0 {
+		panic("cannot register empty path")
+	}
+
+	if len(path) > 0 && path[0] != '/' {
+		panic("path '" + path + "' does not begin with '/'")
+	}
+
+	if path[len(path)-6:] != "/*file" {
+		panic("file server path must end in '*/file'")
+	}
+}
+
+// ----------------------------------------------------------------------
+// Helper methods
 
 // GET is a helper method for m.Handle("GET", path, handlerFunc, mw...)
 func (m *Mux) GET(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc) {
@@ -419,7 +509,15 @@ func (m *Mux) OPTIONS(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc
 }
 
 // PrintTree prints the contents of the routing tree.
-func (m *Mux) PrintRoutes() {
+//
+// The root node is always skipped when performing lookups,
+// so seeing:
+//
+//	  []: nil
+//		   ["/"]: <...>
+//
+// is expected behavior when printing the Tree.
+func (m *Mux) PrintTree() {
 	for k, v := range m.trees {
 		fmt.Printf("[%s]\n", k)
 		v.print(1)

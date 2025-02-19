@@ -11,7 +11,7 @@ import (
 
 // Responder represents a web response.
 type Responder interface {
-	Encode() (data []byte, contentType string, err error)
+	Response() (data []byte, contentType string, err error)
 }
 
 // HTTPStatuser is an optional interface for a response to implement for
@@ -73,7 +73,7 @@ func Respond(ctx context.Context, data Responder) error {
 		return nil
 	}
 
-	v, ct, err := data.Encode()
+	v, ct, err := data.Response()
 	if err != nil {
 		return err
 	}
@@ -112,7 +112,7 @@ type emptyResponse struct {
 	code int
 }
 
-func (r emptyResponse) Encode() ([]byte, string, error) {
+func (r emptyResponse) Response() ([]byte, string, error) {
 	return nil, "", nil
 }
 
@@ -125,7 +125,7 @@ type errorResponse struct {
 	message string
 }
 
-func (r errorResponse) Encode() ([]byte, string, error) {
+func (r errorResponse) Response() ([]byte, string, error) {
 	return toBytes(r.message), "text/plain", nil
 }
 

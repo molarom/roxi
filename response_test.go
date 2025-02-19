@@ -48,7 +48,7 @@ type mockResponder struct {
 	encodeErr   error
 }
 
-func (m mockResponder) Encode() ([]byte, string, error) {
+func (m mockResponder) Response() ([]byte, string, error) {
 	if m.encodeErr != nil {
 		return nil, "", m.encodeErr
 	}
@@ -94,8 +94,8 @@ func Test_Respond(t *testing.T) {
 			false,
 		},
 		{
-			"ResponderWithEncodeError",
-			mockResponder{nil, "", 0, fmt.Errorf("encode err")},
+			"ResponderWithResponseError",
+			mockResponder{nil, "", 0, fmt.Errorf("response err")},
 			0,
 			"",
 			nil,

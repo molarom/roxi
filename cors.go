@@ -53,41 +53,48 @@ var defaultCORS = CORS{
 //		MaxAge:  86400,
 //		Vary:    false,
 //	}
-var DefaultCORS = defaultCORS.Handler
+var DefaultCORS = defaultCORS.HandlerFunc()
 
-// Handler is OPTIONS request handler for handling preflight requests.
-func (c CORS) Handler(ctx context.Context, r *http.Request) error {
-	w := GetWriter(ctx)
-	reqOrigin := r.Header.Get("Origin")
-	for _, o := range c.Origins {
-		if o == "*" || o == reqOrigin {
-			w.Header().Set("Access-Control-Allow-Origin", o)
-			if c.Vary {
-				w.Header().Set("Vary", "Origin")
+// Handler returns a request handler for preflight requests.
+func (c CORS) HandlerFunc() HandlerFunc {
+	// create the joined strings on initialization
+	expose := strings.Join(c.Expose, ", ")
+	methods := strings.Join(c.Methods, ", ")
+	headers := strings.Join(c.Headers, ", ")
+
+	return func(ctx context.Context, r *http.Request) error {
+		w := GetWriter(ctx)
+		reqOrigin := r.Header.Get("Origin")
+		for _, o := range c.Origins {
+			if o == "*" || o == reqOrigin {
+				w.Header().Set("Access-Control-Allow-Origin", o)
+				if c.Vary {
+					w.Header().Set("Vary", "Origin")
+				}
+				break
 			}
-			break
 		}
-	}
 
-	if expose := strings.Join(c.Expose, ", "); expose != "" {
-		w.Header().Set("Access-Control-Expose-Headers", expose)
-	}
+		if c.MaxAge != 0 {
+			w.Header().Set("Access-Control-Max-Age", fmt.Sprintf("%d", c.MaxAge))
+		}
 
-	if c.MaxAge != 0 {
-		w.Header().Set("Access-Control-Max-Age", fmt.Sprintf("%d", c.MaxAge))
-	}
+		if c.Credentials {
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
 
-	if c.Credentials {
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-	}
+		if expose != "" {
+			w.Header().Set("Access-Control-Expose-Headers", expose)
+		}
 
-	if methods := strings.Join(c.Methods, ", "); methods != "" {
-		w.Header().Set("Access-Control-Allow-Methods", methods)
-	}
+		if methods != "" {
+			w.Header().Set("Access-Control-Allow-Methods", methods)
+		}
 
-	if headers := strings.Join(c.Headers, ", "); headers != "" {
-		w.Header().Set("Access-Control-Allow-Headers", headers)
-	}
+		if headers != "" {
+			w.Header().Set("Access-Control-Allow-Headers", headers)
+		}
 
-	return Respond(ctx, NoContent)
+		return Respond(ctx, NoContent)
+	}
 }

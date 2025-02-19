@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"testing"
 )
@@ -37,7 +38,7 @@ func Test_Mux(t *testing.T) {
 	}
 }
 
-func Test_HandleFunc(t *testing.T) {
+func Test_HTTPHandlerFunc(t *testing.T) {
 	mux := New()
 
 	id := -1
@@ -144,8 +145,24 @@ func Test_RedirectTrailingSlash(t *testing.T) {
 	}
 }
 
+func Test_CaseInsensitveRouting(t *testing.T) {
+	mux := New(WithCaseInsensitiveRouting())
+
+	mux.GET("/foo", func(ctx context.Context, r *http.Request) error {
+		return Respond(ctx, NoContent)
+	})
+
+	r, _ := http.NewRequest("GET", "/FOO", nil)
+	w := httptest.NewRecorder()
+
+	mux.ServeHTTP(w, r)
+	if w.Result().StatusCode != 301 {
+		t.Error("failed to redirect with case insensitivity")
+	}
+}
+
 func Test_OptionsHandler(t *testing.T) {
-	mux := New(WithOptionsHandler(HandlerFunc(DefaultCORS)))
+	mux := New(WithOptionsHandler(DefaultCORS))
 
 	mux.GET("/unused", func(ctx context.Context, r *http.Request) error {
 		return InternalServerError(ctx, r)
@@ -178,7 +195,7 @@ func Test_SetAllowHeader(t *testing.T) {
 
 func Test_SetAllowHeaderWithOptions(t *testing.T) {
 	mux := New(
-		WithOptionsHandler(HandlerFunc(DefaultCORS)),
+		WithOptionsHandler(DefaultCORS),
 		WithSetAllowHeader(),
 	)
 
@@ -238,6 +255,101 @@ func Test_RedirectCleanPath(t *testing.T) {
 	}
 }
 
+func Test_HandlerFuncServeHTTPHandleError(t *testing.T) {
+	handler := HandlerFunc(func(ctx context.Context, r *http.Request) error {
+		return fmt.Errorf("woah there partner, you're routing too fast")
+	})
+
+	r, _ := http.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, r)
+	if w.Result().StatusCode != 500 {
+		t.Errorf("failed to handle error; got status code [%d]", w.Result().StatusCode)
+	}
+}
+
+type mockFS struct {
+	opened bool
+}
+
+func (fs *mockFS) Open(name string) (http.File, error) {
+	switch name {
+	case "index.html", "index.js", "asset.png":
+		fs.opened = true
+		return nil, nil
+	case "error.jpeg":
+		return nil, fmt.Errorf("diff error")
+	default:
+		return nil, os.ErrNotExist
+	}
+}
+
+func Test_FileServer(t *testing.T) {
+	mux := NewWithDefaults()
+
+	fs := &mockFS{}
+	mux.FileServer("/files/*file", fs)
+
+	tests := []struct {
+		name       string
+		path       string
+		shouldOpen bool
+	}{
+		{"Match", "/files/index.html", true},
+		{"NoMatch", "/files/file.txt", false},
+		{"ReadError", "/files/error.jpeg", false},
+		{"CleanPath", "/files/./asset.png", true},
+	}
+
+	for _, tt := range tests {
+		fs.opened = false
+		t.Run(tt.name, func(t *testing.T) {
+			fs.opened = false
+			r, _ := http.NewRequest("GET", tt.path, nil)
+			w := httptest.NewRecorder()
+
+			mux.ServeHTTP(w, r)
+			if fs.opened != tt.shouldOpen {
+				t.Errorf("expected: [%v]; got: [%v]", tt.shouldOpen, fs.opened)
+			}
+		})
+	}
+}
+
+func Test_FileServerRE(t *testing.T) {
+	mux := NewWithDefaults()
+
+	fs := &mockFS{}
+	mux.FileServerRE("/files/*file", `.*\.(html|js|jpeg)`, fs)
+
+	tests := []struct {
+		name       string
+		path       string
+		shouldOpen bool
+	}{
+		{"Match", "/files/index.html", true},
+		{"NoMatch", "/files/file.txt", false},
+		{"NoREMatch", "/files/asset.png", false},
+		{"ReadError", "/files/error.jpeg", false},
+		{"CleanPath", "/files/./index.html", true},
+	}
+
+	for _, tt := range tests {
+		fs.opened = false
+		t.Run(tt.name, func(t *testing.T) {
+			fs.opened = false
+			r, _ := http.NewRequest("GET", tt.path, nil)
+			w := httptest.NewRecorder()
+
+			mux.ServeHTTP(w, r)
+			if fs.opened != tt.shouldOpen {
+				t.Errorf("expected: [%v]; got: [%v]", tt.shouldOpen, fs.opened)
+			}
+		})
+	}
+}
+
 // ----------------------------------------------------------------------
 // Benchmark Data
 
@@ -271,6 +383,39 @@ func generateRoutes(prefix string, verbs []string) []string {
 	}
 
 	return routes
+}
+
+// ----------------------------------------------------------------------
+// Alloc Tests
+
+func Test_MuxRoutingAllocs(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping alloc tests in short mode.")
+	}
+
+	routes := generateRoutes("/v1", verbs)
+
+	mux := New()
+	for _, r := range routes {
+		mux.GET(r, func(ctx context.Context, r *http.Request) error { return nil })
+	}
+
+	w := newMockResponseWriter()
+	req, _ := http.NewRequest("GET", "/", nil)
+	u := req.URL
+	q := req.URL.RawQuery
+
+	for _, r := range routes {
+		req.Method = "GET"
+		req.RequestURI = r
+		u.Path = r
+		u.RawQuery = q
+
+		allocs := testing.AllocsPerRun(100, func() { mux.ServeHTTP(w, req) })
+		if allocs > 0 {
+			t.Errorf("mux.ServeHTTP(): expected zero allocs; got [%v]", allocs)
+		}
+	}
 }
 
 // ----------------------------------------------------------------------
