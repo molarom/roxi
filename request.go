@@ -20,15 +20,15 @@ type Validator interface {
 	Validate() error
 }
 
-// Decode attempts to bind an http.Request body to a Request.
-func Decode(r *http.Request, v Binder) error {
+// Bind attempts to bind an http.Request body to a Request.
+func Bind(r *http.Request, v Binder) error {
 	data, err := io.ReadAll(r.Body)
 	if err != nil {
-		return fmt.Errorf("decode: failed to read payload: %w", err)
+		return fmt.Errorf("bind: failed to read payload: %w", err)
 	}
 
 	if err := v.Bind(data); err != nil {
-		return fmt.Errorf("decode: %w", err)
+		return fmt.Errorf("bind: %w", err)
 	}
 
 	if v, ok := v.(Validator); ok {

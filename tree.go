@@ -4,11 +4,9 @@
 package roxi
 
 import (
-	"bytes"
 	"fmt"
 	"net/http"
 	"runtime"
-	"slices"
 	"sort"
 	"strings"
 )
@@ -170,7 +168,7 @@ func (n *node) search(key []byte, r *http.Request) (HandlerFunc, bool) {
 
 		// check full match
 		cKeyLen := len(child.key)
-		if keyLen >= cKeyLen && slices.Compare(key[:cKeyLen], child.key) == 0 {
+		if keyLen >= cKeyLen && prefixLength(key[:cKeyLen], child.key) == cKeyLen {
 			key = key[cKeyLen:]
 			keyLen -= cKeyLen
 			current = child
@@ -180,18 +178,16 @@ func (n *node) search(key []byte, r *http.Request) (HandlerFunc, bool) {
 		// check param match
 		if child.param {
 			prefixLen := prefixLength(key, child.key)
-			if !parseParams(child.key[prefixLen:], key[prefixLen:], r) {
+			lastIdx, ok := parseParams(child.key[prefixLen:], key[prefixLen:], r)
+			if !ok {
 				// no possible match, early return
 				return current.value, false
 			}
 
 			current = child
-			if len(child.edges) != 0 {
-				// check if there's remaining path and continue traversal
-				if idx := bytes.IndexRune(key, '/'); idx != -1 {
-					key = key[idx:]
-					keyLen -= cKeyLen
-				}
+			if len(child.edges) != 0 && lastIdx < keyLen {
+				key = key[lastIdx:]
+				keyLen -= lastIdx
 				continue
 			}
 
@@ -236,19 +232,20 @@ func prefixLength(s1, s2 []byte) int {
 // ----------------------------------------------------------------------
 // params
 
-// parseParams sets the path value for any registered path variables in b.
-func parseParams(b []byte, path []byte, r *http.Request) bool {
+// parseParams sets the path value for any registered path variables in b
+func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 	lenB := len(b)
 	lenPath := len(path)
 	i, j := 0, 0
 	for i < lenB && j < lenPath {
+
 		// Check for param token
 		if b[i] == ':' {
 			start := i + 1
 			for ; b[i] != '/' && i < lenB-1; i++ {
 			}
 			end := i
-			if i == lenB-1 {
+			if i == lenB-1 && b[i] != '/' {
 				end++
 			}
 
@@ -257,7 +254,7 @@ func parseParams(b []byte, path []byte, r *http.Request) bool {
 			for ; path[j] != '/' && j < lenPath-1; j++ {
 			}
 			pEnd := j
-			if j == lenPath-1 {
+			if j == lenPath-1 && path[j] != '/' {
 				pEnd++
 			}
 
@@ -291,8 +288,10 @@ func parseParams(b []byte, path []byte, r *http.Request) bool {
 		break
 	}
 
-	// if we reached the end for both, then it's a match.
-	return j >= lenPath-1 && i >= lenB-1
+	// if we reached the end for both,
+	// or end of b and prev char are eq,
+	// it's a match.
+	return j, (j >= lenPath-1 && i >= lenB-1) || (path[j-1] == b[lenB-1])
 }
 
 // countParams counts the number of params in b.
