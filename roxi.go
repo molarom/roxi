@@ -243,7 +243,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if m.panicHandler != nil {
 		defer func() {
 			if rec := recover(); rec != nil {
-				m.log("recovered panic: %v", rec)
+				m.log("recovered", "panic", rec)
 				m.panicHandler(ctx, r, rec)
 			}
 		}()
@@ -288,7 +288,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// search for handler
 	if handler, found := root.search(path, r); found {
 		if err := handler(ctx, r); err != nil {
-			m.log("executing handler: %s", err)
+			m.log("executing handler", "error", err)
 			m.errHandler.ServeHTTP(w, r)
 		}
 		return
@@ -324,7 +324,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// found a match, redirect to correct path.
 			if _, found := root.search(path, r); found {
 				r.URL.Path = toString(path)
-				m.log("redirecting to: %s", r.URL.Path)
+				m.log("redirecting to", "path", r.URL.Path)
 				_ = Redirect(ctx, r, r.URL.String(), code)
 				return
 			}
@@ -332,7 +332,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// not found case.
-	m.log("no matching route registered for: %s", r.URL.Path)
+	m.log("no matching route registered for", "path", r.URL.Path)
 	m.notFound.ServeHTTP(w, r)
 }
 
