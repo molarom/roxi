@@ -370,6 +370,7 @@ var verbs = []string{
 	"help",
 	"contact",
 	"address",
+	":path",
 }
 
 // generateRoutes generates a list of static routes from the verbs provided.

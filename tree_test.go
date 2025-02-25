@@ -95,8 +95,8 @@ func Test_ParseParams(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := &http.Request{}
-			lastIdx, ok := parseParams([]byte(tt.wcPath), []byte(tt.path), req)
+			req, _ := http.NewRequest("GET", tt.path, nil)
+			lastIdx, ok := parseParams([]byte(tt.wcPath), toBytes(req.URL.Path), req)
 			if ok != tt.ok {
 				t.Errorf("expected: [%v]; got [%v]", tt.ok, ok)
 			}
@@ -111,6 +111,109 @@ func Test_ParseParams(t *testing.T) {
 				t.Log("path value:", pv)
 				if pv == "" {
 					t.Errorf("expected path value [%s] to be set", v)
+				}
+			}
+		})
+	}
+}
+
+func Benchmark_ParseParams(b *testing.B) {
+	tests := []struct {
+		name    string
+		wcPath  string
+		path    string
+		params  []string
+		lastIdx int
+		ok      bool
+	}{
+		{
+			"Parse",
+			"/path/:with/:param",
+			"/path/sub/subsub",
+			[]string{
+				"with",
+				"param",
+			},
+			15,
+			true,
+		},
+		{
+			"ParseMismatchedSegments",
+			"/user/group/:group_id",
+			"/user/group",
+			[]string{},
+			11,
+			false,
+		},
+		{
+			"ParseMismatchedNoLeadingSlash",
+			":path",
+			"foo/bar",
+			[]string{},
+			3,
+			false,
+		},
+		{
+			"ParseMatchNoLeadingSlash",
+			"foo/:bar",
+			"foo/bar",
+			[]string{"bar"},
+			7,
+			true,
+		},
+		{
+			"ParseWithTrailingSlash",
+			":bar/",
+			"foo/",
+			[]string{"bar"},
+			4,
+			true,
+		},
+		{
+			"ParseMatchPartialMiddle",
+			"/path/:bar/b",
+			"/path/s/baz",
+			[]string{"bar"},
+			9,
+			true,
+		},
+		{
+			"ParseWildcardShort",
+			"/path/*wildcard",
+			"/path/single",
+			[]string{"wildcard"},
+			11,
+			true,
+		},
+		{
+			"ParseWildcardLong",
+			"/path/*wildcard",
+			"/path" + strings.Repeat("/path", 80),
+			[]string{"wildcard"},
+			404,
+			true,
+		},
+	}
+
+	for _, tt := range tests {
+		b.Run(tt.name, func(b *testing.B) {
+			req, _ := http.NewRequest("GET", tt.path, nil)
+			for i := 0; i < b.N; i++ {
+
+				lastIdx, ok := parseParams(toBytes(tt.wcPath), toBytes(req.URL.Path), req)
+				if ok != tt.ok {
+					b.Errorf("expected: [%v]; got [%v]", tt.ok, ok)
+				}
+
+				if lastIdx != tt.lastIdx {
+					b.Errorf("expected: [%d]; got [%d]", tt.lastIdx, lastIdx)
+				}
+
+				// Check path value gets set correctly.
+				for _, v := range tt.params {
+					if req.PathValue(v) == "" {
+						b.Errorf("expected path value [%s] to be set", v)
+					}
 				}
 			}
 		})
