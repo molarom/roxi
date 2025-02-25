@@ -1,13 +1,15 @@
 // Copyright 2025 Brandon Epperson
 // SPDX-License-Identifier: Apache-2.0
+// Components based on the sort package, Copyright 2010 The Go Authors.
 
 package roxi
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 )
 
@@ -24,9 +26,8 @@ type edges []edge
 func (e edges) get(label byte) (*node, bool) {
 	l := len(e)
 
-	idx := sort.Search(l, func(i int) bool {
-		return e[i].label >= label
-	})
+	idx := e.binarySearch(l, label)
+
 	if idx < l && e[idx].label == label {
 		return e[idx].node, true
 	}
@@ -39,13 +40,28 @@ func (e edges) get(label byte) (*node, bool) {
 // of heap allocations when inserting an edge.
 func (e edges) add(n edge) edges {
 	l := len(e)
-	idx := sort.Search(l, func(i int) bool {
-		return e[i].label >= n.label
-	})
+	idx := e.binarySearch(l, n.label)
 	e = append(e, edge{})
 	copy(e[idx+1:], e[idx:])
 	e[idx] = n
 	return e
+}
+
+// binarySearch is copied from sort.Search so the function
+// call can be inlined.
+func (e edges) binarySearch(n int, label byte) int {
+	i, j := 0, n
+	for i < j {
+		h := int(uint(i+j) >> 1)
+		if !(e[h].label >= label) {
+			i = h + 1
+		} else {
+			j = h
+		}
+
+	}
+
+	return i
 }
 
 // ----------------------------------------------------------------------
@@ -65,7 +81,8 @@ type node struct {
 
 // insert inserts a new key value pair into the tree.
 func (n *node) insert(key []byte, value HandlerFunc) {
-	fullKey := key
+	insKeyFull := key
+	cKeyFull := bytes.NewBuffer(make([]byte, 0, len(key)))
 
 	params := countParams(key)
 	current := n
@@ -92,14 +109,16 @@ func (n *node) insert(key []byte, value HandlerFunc) {
 		if prefixLen == cKeyLen {
 			key = key[prefixLen:]
 			current = child
+			cKeyFull.Write(child.key)
 			continue
 		}
 
 		// match on param, we've got a conflict.
 		if child.param && params != 0 && key[prefixLen-1] == ':' {
+			cKeyFull.Write(child.key)
 			panic("Only one path variable can be registered per segment: \n" +
-				"Route: '" + string(fullKey) + "'\n" +
-				"Conflicts with: '" + string(child.key) + "'")
+				"Route: '" + string(insKeyFull) + "'\n" +
+				"Conflicts with: '" + cKeyFull.String() + "'")
 		}
 
 		// partial, split and update node
@@ -142,10 +161,11 @@ func (n *node) insert(key []byte, value HandlerFunc) {
 	}
 
 	pc, file, line, _ := runtime.Caller(2)
+	fn := filepath.Base(runtime.FuncForPC(pc).Name())
 
-	panic("Route '" + string(fullKey) +
-		"' registered at '" +
-		fmt.Sprintf("%s %s:%d", file, runtime.FuncForPC(pc).Name(), line) +
+	panic("Route '" + string(insKeyFull) +
+		"' registered in '" +
+		fmt.Sprintf("%s() %s:%d", fn, file, line) +
 		"' has previously been registered.")
 }
 

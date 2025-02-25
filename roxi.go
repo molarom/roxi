@@ -7,13 +7,12 @@
 // httptreemux. It still makes use of a PATRICA tree, but the tree implementation differs from both.
 //
 // The aim was to have a mux that mets the following requirements:
-//
-// 1. A path segment may be variable in one route and a static token in another.
-// 2. Path values can be retrieved with r.PathValue(<var>)
-// 3. HandlerFunc's accept a context.Context parameter and can return errors.
-// 4. Provide a simple mux-wide configuration.
-// 5. Be as performant and memory efficent as possible.
-// 6. Integrate well with net/http as well as any extension packages.
+//  1. A path segment may be variable in one route and a static token in another.
+//  2. Path values can be retrieved with r.PathValue(<var>)
+//  3. HandlerFunc's accept a context.Context parameter and can return errors.
+//  4. Provide a simple mux-wide configuration.
+//  5. Be as performant and memory efficent as possible.
+//  6. Integrate well with net/http as well as any extension packages.
 //
 // There are some additional methods included in this package that may optionally be used
 // to improve developer experience, such as Decode and Respond for handling request
@@ -45,6 +44,8 @@ type HandlerFunc func(ctx context.Context, r *http.Request) error
 // If a HandlerFunc is invoked with ServeHTTP and returns an error,
 // http.Error is called to return the error in the response text and set the
 // response code to 500.
+//
+// http.Error(w, err.Error(), http.StatusInternalServerError)
 //
 // If this behavior is undesired, the error must be handled and set to nil
 // prior to it's return.
@@ -94,7 +95,6 @@ type Mux struct {
 // This includes the omission of the default PanicHandler.
 func New(opts ...func(*Mux)) *Mux {
 	m := &Mux{
-		log:              log.Printf,
 		trees:            make(map[string]*node),
 		methodNotAllowed: HandlerFunc(MethodNotAllowed),
 		notFound:         HandlerFunc(NotFound),
@@ -103,6 +103,9 @@ func New(opts ...func(*Mux)) *Mux {
 			New: func() any {
 				return new(writerContext)
 			},
+		},
+		log: func(msg string, args ...any) {
+			log.Print(msg, ": ", args)
 		},
 	}
 
@@ -138,7 +141,7 @@ func NewWithDefaults(opts ...func(*Mux)) *Mux {
 // ----------------------------------------------------------------------
 // Mux options
 
-// WithLogger replaces the mux's internal logger. By default, it calls log.Printf.
+// WithLogger replaces the mux's internal logger. By default, it calls log.Print.
 func WithLogger(log Logger) func(*Mux) {
 	return func(m *Mux) {
 		m.log = log
@@ -243,7 +246,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if m.panicHandler != nil {
 		defer func() {
 			if rec := recover(); rec != nil {
-				m.log("recovered ", "panic ", rec)
+				m.log("recovered", "panic", rec)
 				m.panicHandler(ctx, r, rec)
 			}
 		}()
@@ -324,7 +327,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// found a match, redirect to correct path.
 			if _, found := root.search(path, r); found {
 				r.URL.Path = toString(path)
-				m.log("redirecting to ", "path ", r.URL.Path)
+				m.log("redirecting to", "path", r.URL.Path)
 				_ = Redirect(ctx, r, r.URL.String(), code)
 				return
 			}
@@ -332,7 +335,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// not found case.
-	m.log("no matching route registered for ", "path ", r.URL.Path)
+	m.log("no matching route registered", "path", r.URL.Path)
 	m.notFound.ServeHTTP(w, r)
 }
 
@@ -437,7 +440,7 @@ func (m *Mux) FileServerRE(path, regex string, fs http.FileSystem) {
 	m.GET(path, func(ctx context.Context, r *http.Request) error {
 		f := stdpath.Clean(r.PathValue("file"))
 		if !re.MatchString(f) {
-			m.log("regexp did not match: %s", f)
+			m.log("regexp did not match", "regex", re, "file", f)
 			m.notFound.ServeHTTP(GetWriter(ctx), r)
 			return nil
 		}

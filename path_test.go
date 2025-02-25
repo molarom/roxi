@@ -111,19 +111,19 @@ func genLongPaths() (testPaths []cleanPathTest) {
 		testPaths = append(testPaths, cleanPathTest{
 			path:   correctPath,
 			result: correctPath,
-			buf:    []byte(correctPath),
+			buf:    toBytes(correctPath),
 		}, cleanPathTest{
 			path:   ss,
 			result: correctPath,
-			buf:    []byte(correctPath),
+			buf:    toBytes(correctPath),
 		}, cleanPathTest{
 			path:   "//" + ss,
 			result: correctPath,
-			buf:    []byte(correctPath),
+			buf:    toBytes(correctPath),
 		}, cleanPathTest{
 			path:   "/" + ss + "/b/..",
 			result: correctPath,
-			buf:    []byte(correctPath),
+			buf:    toBytes(correctPath),
 		})
 	}
 	return testPaths
