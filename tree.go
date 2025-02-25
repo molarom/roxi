@@ -256,6 +256,10 @@ func prefixLength(s1, s2 []byte) int {
 func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 	lenB := len(b)
 	lenPath := len(path)
+	if lenPath == 0 {
+		return 0, false
+	}
+
 	i, j := 0, 0
 	for i < lenB && j < lenPath {
 

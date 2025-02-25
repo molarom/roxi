@@ -36,7 +36,7 @@ func Test_ParseParams(t *testing.T) {
 			true,
 		},
 		{
-			"ParseMismatchedSegments",
+			"MismatchedSegments",
 			"/user/group/:group_id",
 			"/user/group",
 			[]string{},
@@ -44,7 +44,7 @@ func Test_ParseParams(t *testing.T) {
 			false,
 		},
 		{
-			"ParseMismatchedNoLeadingSlash",
+			"MismatchedNoLeadingSlash",
 			":path",
 			"foo/bar",
 			[]string{},
@@ -52,7 +52,7 @@ func Test_ParseParams(t *testing.T) {
 			false,
 		},
 		{
-			"ParseMatchNoLeadingSlash",
+			"MatchNoLeadingSlash",
 			"foo/:bar",
 			"foo/bar",
 			[]string{"bar"},
@@ -60,7 +60,7 @@ func Test_ParseParams(t *testing.T) {
 			true,
 		},
 		{
-			"ParseWithTrailingSlash",
+			"WithTrailingSlash",
 			":bar/",
 			"foo/",
 			[]string{"bar"},
@@ -68,7 +68,7 @@ func Test_ParseParams(t *testing.T) {
 			true,
 		},
 		{
-			"ParseMatchPartialMiddle",
+			"MatchPartialMiddle",
 			"/path/:bar/b",
 			"/path/s/baz",
 			[]string{"bar"},
@@ -76,7 +76,7 @@ func Test_ParseParams(t *testing.T) {
 			true,
 		},
 		{
-			"ParseWildcardShort",
+			"WildcardShort",
 			"/path/*wildcard",
 			"/path/single",
 			[]string{"wildcard"},
@@ -84,12 +84,20 @@ func Test_ParseParams(t *testing.T) {
 			true,
 		},
 		{
-			"ParseWildcardLong",
+			"WildcardLong",
 			"/path/*wildcard",
 			"/path" + strings.Repeat("/path", 80),
 			[]string{"wildcard"},
 			404,
 			true,
+		},
+		{
+			"EmptyPath",
+			":contact_id/edit",
+			"",
+			[]string{},
+			0,
+			false,
 		},
 	}
 
