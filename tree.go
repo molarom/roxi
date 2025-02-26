@@ -310,6 +310,7 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 			} else {
 				r.SetPathValue(toString(b[start:end]), toString(path[pStart:pEnd]))
 			}
+			// edge case, empty path matched on wildcard.
 		} else {
 			r.SetPathValue(toString(b[start:end]), "/")
 		}
