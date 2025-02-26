@@ -32,7 +32,7 @@ func Test_ParseParams(t *testing.T) {
 				"with",
 				"param",
 			},
-			15,
+			16,
 			true,
 		},
 		{
@@ -99,6 +99,14 @@ func Test_ParseParams(t *testing.T) {
 			0,
 			false,
 		},
+		{
+			"EmptyWildcard",
+			"*wildcard",
+			"",
+			[]string{},
+			0,
+			true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -142,7 +150,7 @@ func Benchmark_ParseParams(b *testing.B) {
 				"with",
 				"param",
 			},
-			15,
+			16,
 			true,
 		},
 		{
@@ -437,5 +445,5 @@ func Test_Tree(t *testing.T) {
 		})
 	}
 
-	tree.print(0)
+	// tree.print(0)
 }

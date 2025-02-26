@@ -253,6 +253,11 @@ func Test_RedirectCleanPath(t *testing.T) {
 	if w.Result().StatusCode != 301 {
 		t.Errorf("failed redirect; got status code [%d]", w.Result().StatusCode)
 	}
+
+	loc := w.Result().Header.Get("Location")
+	if loc != "/redirect" {
+		t.Errorf("failed redirect; got location [%s]", loc)
+	}
 }
 
 func Test_HandlerFuncServeHTTPHandleError(t *testing.T) {
@@ -346,6 +351,37 @@ func Test_FileServerRE(t *testing.T) {
 			if fs.opened != tt.shouldOpen {
 				t.Errorf("expected: [%v]; got: [%v]", tt.shouldOpen, fs.opened)
 			}
+		})
+	}
+}
+
+// ----------------------------------------------------------------------
+// Edge cases
+
+func Test_WildcardHandler(t *testing.T) {
+	mux := NewWithDefaults()
+	mux.GET("/*path", func(ctx context.Context, r *http.Request) error {
+		return Respond(ctx, NoContent)
+	})
+
+	tests := []struct {
+		name string
+		path string
+		ok   bool
+	}{
+		{"Empty", "/", true},
+	}
+
+	for _, tt := range tests {
+		w := httptest.NewRecorder()
+		r, _ := http.NewRequest("GET", tt.path, nil)
+		t.Run(tt.name, func(t *testing.T) {
+			mux.ServeHTTP(w, r)
+
+			if w.Result().StatusCode != 204 && tt.ok {
+				t.Error("failed to route request")
+			}
+			t.Log(r.PathValue("path"))
 		})
 	}
 }

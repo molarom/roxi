@@ -254,10 +254,14 @@ func prefixLength(s1, s2 []byte) int {
 
 // parseParams sets the path value for any registered path variables in b
 func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
+	// TODO: tidy all of this
 	lenB := len(b)
 	lenPath := len(path)
+
 	if lenPath == 0 {
-		return 0, false
+		if !(checkWildCard(b, 0, lenB) || checkWildCard(b, 1, lenB)) {
+			return 0, false
+		}
 	}
 
 	i, j := 0, 0
@@ -265,24 +269,14 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 
 		// Check for param token
 		if b[i] == ':' {
-			start := i + 1
-			for ; b[i] != '/' && i < lenB-1; i++ {
-			}
-			end := i
-			if i == lenB-1 && b[i] != '/' {
-				end++
-			}
+			end := indexSlash(b, lenB, i)
 
 			// grab the path value
-			pStart := j
-			for ; path[j] != '/' && j < lenPath-1; j++ {
-			}
-			pEnd := j
-			if j == lenPath-1 && path[j] != '/' {
-				pEnd++
-			}
+			pEnd := indexSlash(path, lenPath, j)
 
-			r.SetPathValue(toString(b[start:end]), toString(path[pStart:pEnd]))
+			r.SetPathValue(toString(b[i+1:end]), toString(path[j:pEnd]))
+			i, j = end, pEnd
+
 			continue
 		}
 
@@ -293,29 +287,62 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 			continue
 		}
 
-		// wildcard is the unlikely case, so check this last.
-		if b[i] == '*' {
-			start := i + 1
-			for ; i < lenB-1; i++ {
-			}
-			end := i + 1
+		break
+	}
 
-			// grab the path value
+	// wildcard is the unlikely case, so check this last.
+	if checkWildCard(b, i, lenB) {
+		start := i + 1
+		for ; i < lenB-1; i++ {
+		}
+		end := i + 1
+
+		// grab the path value
+		if lenPath > 0 {
 			pStart := j
 			for ; j < lenPath-1; j++ {
 			}
 			pEnd := j + 1
 
-			r.SetPathValue(toString(b[start:end]), toString(path[pStart:pEnd]))
+			// bounds check for leading slash
+			if j == 1 {
+				r.SetPathValue(toString(b[start:end]), toString(path[pStart-1:pEnd]))
+			} else {
+				r.SetPathValue(toString(b[start:end]), toString(path[pStart:pEnd]))
+			}
+		} else {
+			r.SetPathValue(toString(b[start:end]), "/")
 		}
-
-		break
 	}
 
 	// if we reached the end for both,
 	// or end of b and prev char are eq,
 	// it's a match.
-	return j, (j >= lenPath-1 && i >= lenB-1) || (path[j-1] == b[lenB-1])
+	return j, (j >= lenPath-1 && i >= lenB-1) || (path[j-1] == b[i-1] && j-1 != lenPath-1)
+}
+
+func indexSlash(b []byte, l, start int) int {
+	if l == 0 {
+		return 0
+	}
+	end := start
+	for ; b[end] != '/' && end < l-1; end++ {
+	}
+
+	if b[end] != '/' && end == l-1 {
+		return end + 1
+	}
+	return end
+}
+
+func checkWildCard(b []byte, idx, l int) bool {
+	if idx >= l {
+		return false
+	}
+	if b[idx] != '*' {
+		return false
+	}
+	return true
 }
 
 // countParams counts the number of params in b.
