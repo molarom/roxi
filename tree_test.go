@@ -445,5 +445,5 @@ func Test_Tree(t *testing.T) {
 		})
 	}
 
-	// tree.print(0)
+	tree.print(0)
 }
