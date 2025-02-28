@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"runtime"
 )
 
 // Responder represents a web response.
@@ -47,6 +48,14 @@ var (
 			http.StatusInternalServerError,
 			http.StatusText(http.StatusInternalServerError),
 		})
+	}
+
+	// DefaultPanicHandler is an optional handler that executes when a panic is recovered.
+	DefaultPanicHandler = func(ctx context.Context, r *http.Request, err interface{}) {
+		buf := make([]byte, 65536)
+		buf = buf[:runtime.Stack(buf, false)]
+		fmt.Printf("roxi: recovered panic %v: %s\n", err, buf)
+		GetWriter(ctx).WriteHeader(http.StatusInternalServerError)
 	}
 )
 

@@ -4,19 +4,8 @@
 // Package roxi is a lightweight http multiplexer.
 //
 // This package borrows inspiration from Julien Schmidt's httprouter and Daniel Imfeld's
-// httptreemux. It still makes use of a PATRICA tree, but the tree implementation differs from both.
-//
-// The aim was to have a mux that mets the following requirements:
-//  1. A path segment may be variable in one route and a static token in another.
-//  2. Path values can be retrieved with r.PathValue(<var>)
-//  3. HandlerFunc's accept a context.Context parameter and can return errors.
-//  4. Provide a simple mux-wide configuration.
-//  5. Be as performant and memory efficent as possible.
-//  6. Integrate well with net/http as well as any extension packages.
-//
-// There are some additional methods included in this package that may optionally be used
-// to improve developer experience, such as Decode and Respond for handling request
-// and response data respectively. These components were inspired by Bill Kennedy's Service project.
+// httptreemuxin that it uses the same format for path variables and makes
+// use of a PATRICA tree, but the tree and variable handling implementation differs from both.
 package roxi
 
 import (
@@ -36,19 +25,18 @@ import (
 //
 // The http.ResponseWriter can be retrieved from the context with:
 //
-//	GetWriter(ctx)
+//	roxi.GetWriter(ctx)
 type HandlerFunc func(ctx context.Context, r *http.Request) error
 
 // ServeHTTP implements the http.Handler interface.
 //
 // If a HandlerFunc is invoked with ServeHTTP and returns an error,
-// http.Error is called to return the error in the response text and set the
-// response code to 500.
+// http.Error will be called in the manner below:
 //
-// http.Error(w, err.Error(), http.StatusInternalServerError)
+//	http.Error(w, err.Error(), http.StatusInternalServerError)
 //
 // If this behavior is undesired, the error must be handled and set to nil
-// prior to it's return.
+// prior to the function's return.
 func (f HandlerFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Setup context.
 	ctx := r.Context()
@@ -91,14 +79,14 @@ type Mux struct {
 
 // New returns a new initalized Mux.
 //
-// No options are configured other than the default error handlers.
-// This includes the omission of the default PanicHandler.
+// No options are configured other than the default error handlers and panic handler.
 func New(opts ...func(*Mux)) *Mux {
 	m := &Mux{
 		trees:            make(map[string]*node),
 		methodNotAllowed: HandlerFunc(MethodNotAllowed),
 		notFound:         HandlerFunc(NotFound),
 		errHandler:       HandlerFunc(InternalServerError),
+		panicHandler:     DefaultPanicHandler,
 		ctxPool: sync.Pool{
 			New: func() any {
 				return new(writerContext)
@@ -119,21 +107,17 @@ func New(opts ...func(*Mux)) *Mux {
 //
 // It is equivalent to calling:
 //
-// New(
-// 		WithSetAllowHeader(),
-// 		WithRedirectCleanPath(),
-// 		WithRedirectTrailingSlash(),
-// 		WithPanicHandler(DefaultPanicHandler),
-//      opts...,
-// )
-
+//	New(append([]func(*Mux){
+//			WithSetAllowHeader(),
+//			WithRedirectCleanPath(),
+//			WithRedirectTrailingSlash(),
+//		}, opts...)...)
 func NewWithDefaults(opts ...func(*Mux)) *Mux {
 	return New(
 		append([]func(*Mux){
 			WithSetAllowHeader(),
 			WithRedirectCleanPath(),
 			WithRedirectTrailingSlash(),
-			WithPanicHandler(DefaultPanicHandler),
 		}, opts...)...,
 	)
 }
@@ -155,10 +139,13 @@ func WithMiddleware(mw ...MiddlewareFunc) func(*Mux) {
 	}
 }
 
-// WithPanicHandler registers a PanicHandler to recover from panics.
+// WithPanicHandler enables panic recovery in the mux and registers a PanicHandler
+// that executes if a panic occurs during the lifecycle of the mux.
 //
 // When adding a panic handler, the mux will also log the error message
 // from the panic.
+//
+// To disable the panic handler, provide a nil value to the handler parameter.
 func WithPanicHandler(handler PanicHandler) func(*Mux) {
 	return func(m *Mux) {
 		m.panicHandler = handler
@@ -184,10 +171,6 @@ func WithSetAllowHeader() func(*Mux) {
 }
 
 // WithRedirectCaseInsensitive enables case insensitive routing.
-//
-// Example:
-//
-// mux.GET("/FOO", handlerFunc) Matches: ("/FOO", "/foo", "/fOO", etc.)
 func WithCaseInsensitiveRouting() func(*Mux) {
 	return func(m *Mux) {
 		m.routeCaseInsensitive = true
@@ -217,14 +200,14 @@ func WithMethodNotAllowedHandler(handler http.Handler) func(*Mux) {
 	}
 }
 
-// WithNotFoundResponse replaces the default 404 response handler.
+// WithNotFoundHandler replaces the default 404 response handler.
 func WithNotFoundHandler(handler http.Handler) func(*Mux) {
 	return func(m *Mux) {
 		m.notFound = handler
 	}
 }
 
-// WithErrorResponse replaces the default 500 response handler.
+// WithErrorHandler replaces the default 500 response handler.
 func WithErrorHandler(handler http.Handler) func(*Mux) {
 	return func(m *Mux) {
 		m.errHandler = handler
@@ -309,10 +292,6 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		redirect := (m.redirectCleanPath || m.redirectTrailingSlash || m.routeCaseInsensitive)
 
 		// step through each enabled path scrubbing option
-		if m.routeCaseInsensitive {
-			path = toBytes(strings.ToLower(r.URL.Path))
-		}
-
 		if m.redirectCleanPath {
 			path = CleanPath(r.URL.Path)
 		}
@@ -321,6 +300,10 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if len(path) > 1 && path[len(path)-1] == '/' {
 				path = path[:len(path)-1]
 			}
+		}
+
+		if m.routeCaseInsensitive {
+			path = bytes.ToLower(path)
 		}
 
 		if redirect {
@@ -509,6 +492,16 @@ func (m *Mux) DELETE(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc)
 // OPTIONS is a helper method for m.Handle("OPTIONS", path, handlerFunc, mw...)
 func (m *Mux) OPTIONS(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc) {
 	m.Handle("OPTIONS", path, handlerFunc, mw...)
+}
+
+// ----------------------------------------------------------------------
+// Debugging methods
+
+// PrintRoutes prints all of the routes registered in the Mux.
+func (m *Mux) PrintRoutes() {
+	for k, v := range m.trees {
+		v.printLeaves(toBytes(k + " "))
+	}
 }
 
 // PrintTree prints the contents of the routing tree.

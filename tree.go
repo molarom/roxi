@@ -237,6 +237,21 @@ func (n *node) print(level int) {
 	}
 }
 
+// printleaves recursively prints all of the leaf node keys.
+func (n *node) printLeaves(parent []byte) {
+	if n == nil {
+		return
+	}
+
+	if n.leaf {
+		fmt.Println(toString(parent))
+	}
+
+	for _, child := range n.edges {
+		child.node.printLeaves(append(parent, child.node.key...))
+	}
+}
+
 // prefixLength calculates the common prefix length between s1 and s2.
 func prefixLength(s1, s2 []byte) int {
 	l := len(s1)
@@ -305,7 +320,7 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 			pEnd := j + 1
 
 			// bounds check for leading slash
-			if j == 1 {
+			if pStart == 1 {
 				r.SetPathValue(toString(b[start:end]), toString(path[pStart-1:pEnd]))
 			} else {
 				r.SetPathValue(toString(b[start:end]), toString(path[pStart:pEnd]))

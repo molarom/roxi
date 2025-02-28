@@ -3,7 +3,7 @@
 
 package roxi
 
-// MiddlewareFunc represents a function to be chained in execution.
+// MiddlewareFunc represents HandlerFuncs that are chained in execution.
 type MiddlewareFunc func(handle HandlerFunc) HandlerFunc
 
 // MiddlewareStack represents a group of MiddlewareFunc to execute in sequence.

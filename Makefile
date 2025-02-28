@@ -2,9 +2,6 @@ deps:
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.5
 	go install mvdan.cc/gofumpt@latest
 
-tidy:
-	go mod tidy
-
 fmt:
 	gofumpt -l -w .
 
