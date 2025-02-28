@@ -20,7 +20,7 @@ and response data respectively. These components were inspired by [Bill Kennedy'
 ### Install
 
 ```bash
-go get gitlab.com/romalor/roxi@v1
+go get gitlab.com/romalor/roxi@v1.0.0
 ```
 
 ### Example
