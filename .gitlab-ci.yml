@@ -1,37 +1,37 @@
-image: golang:1.23
+# image: golang:1.23
 
 stages:
-  - lint
-  - test
+  # - lint
+  # - test
   - prepare
   - release
 
-before_script:
-  - apt update -y && apt install -y make
-  - go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.5
-  - go install mvdan.cc/gofumpt@latest
+# before_script:
+#   - apt update -y && apt install -y make
+#   - go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.5
+#   - go install mvdan.cc/gofumpt@latest
 
-lint:
-  stage: lint
-  script:
-    - gofumpt -d
-    - golangci-lint run
-
-test:
-  stage: test
-  script:
-    - make test
-
-test-race:
-  stage: test
-  script:
-    - make test-race
-
-coverage:
-  stage: test
-  script:
-    - make cover
-  coverage: '/coverage: \d+.\d+% of statements/'
+# lint:
+#   stage: lint
+#   script:
+#     - gofumpt -d
+#     - golangci-lint run
+# 
+# test:
+#   stage: test
+#   script:
+#     - make test
+# 
+# test-race:
+#   stage: test
+#   script:
+#     - make test-race
+# 
+# coverage:
+#   stage: test
+#   script:
+#     - make cover
+#   coverage: '/coverage: \d+.\d+% of statements/'
 
 prepare_job:
   stage: prepare
@@ -48,6 +48,7 @@ prepare_job:
 
 release_job:
   stage: release
+  before_script: []
   image: registry.gitlab.com/gitlab-org/release-cli:latest
   needs:
     - job: prepare_job

@@ -35,11 +35,13 @@ type CORS struct {
 }
 
 var defaultCORS = CORS{
-	Origins: []string{"*"},
-	Methods: []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
-	Headers: []string{"Accept", "Content-Type", "Content-Length", "Accept-Encoding", "Origin", "Authorization"},
-	MaxAge:  86400,
-	Vary:    false,
+	Origins:     []string{"*"},
+	Methods:     []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
+	Expose:      []string{"Content-Encoding"},
+	Headers:     []string{"Accept", "Content-Type", "Content-Length", "Accept-Encoding", "Origin", "Authorization"},
+	Credentials: true,
+	MaxAge:      86400,
+	Vary:        true,
 }
 
 // DefaultCORS is an optional OPTIONS handler with reasonable defaults set for responding to preflight requests.
@@ -47,11 +49,13 @@ var defaultCORS = CORS{
 // Values Set:
 //
 //	CORS{
-//		Origins: []string{"*"},
-//		Methods: []string{"GET", "POST", "PUT", "DELETE", "UPDATE"},
-//		Headers: []string{"Accept", "Content-Type", "Content-Length", "Accept-Encoding", "Origin", "Authorization"},
-//		MaxAge:  86400,
-//		Vary:    false,
+//	    Origins:     []string{"*"},
+//	    Methods:     []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
+//	    Expose:      []string{"Content-Encoding"},
+//	    Headers:     []string{"Accept", "Content-Type", "Content-Length", "Accept-Encoding", "Origin", "Authorization"},
+//	    Credentials: true,
+//	    MaxAge:      86400,
+//	    Vary:        true,
 //	}
 var DefaultCORS = defaultCORS.HandlerFunc()
 

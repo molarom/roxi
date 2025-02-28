@@ -38,6 +38,33 @@ func Test_Mux(t *testing.T) {
 	}
 }
 
+func Test_InvalidRoutes(t *testing.T) {
+	h := func(ctx context.Context, r *http.Request) error { return nil }
+	tests := []struct {
+		name   string
+		method string
+		path   string
+		h      HandlerFunc
+	}{
+		{"EmptyMethod", "", "/", h},
+		{"InvalidMethod", "PANDA", "/", h},
+		{"InvalidPath", "GET", "asdf", h},
+		{"NilHandler", "GET", "asdf", nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				if rec := recover(); rec == nil {
+					t.Log("failed to catch bad registration")
+					t.FailNow()
+				}
+			}()
+			New().Handle(tt.method, tt.path, tt.h)
+		})
+	}
+}
+
 func Test_HTTPHandlerFunc(t *testing.T) {
 	mux := New()
 
@@ -94,6 +121,18 @@ func Test_MuxMethods(t *testing.T) {
 			t.Errorf("request failed with %s %s", k, "/"+k)
 		}
 	}
+	mux2 := New()
+
+	// Check registration helpers
+	mux2.GET("/", func(ctx context.Context, r *http.Request) error { return nil })
+	mux2.HEAD("/", func(ctx context.Context, r *http.Request) error { return nil })
+	mux2.POST("/", func(ctx context.Context, r *http.Request) error { return nil })
+	mux2.PUT("/", func(ctx context.Context, r *http.Request) error { return nil })
+	mux2.PATCH("/", func(ctx context.Context, r *http.Request) error { return nil })
+	mux2.DELETE("/", func(ctx context.Context, r *http.Request) error { return nil })
+	mux2.OPTIONS("/", func(ctx context.Context, r *http.Request) error { return nil })
+
+	mux.PrintRoutes()
 }
 
 func Test_NotFound(t *testing.T) {

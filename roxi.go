@@ -389,7 +389,7 @@ func (m *Mux) Handle(method, path string, handlerFunc HandlerFunc, mw ...Middlew
 // called over the internal http.FileServer ones.
 //
 // The path must end in a wildcard with the name '*file'.
-func (m *Mux) FileServer(path string, fs http.FileSystem) {
+func (m *Mux) FileServer(path string, fs http.FileSystem, mw ...MiddlewareFunc) {
 	// check path
 	checkFSPath(path)
 
@@ -406,14 +406,14 @@ func (m *Mux) FileServer(path string, fs http.FileSystem) {
 		r.URL.Path = f
 		fsrv.ServeHTTP(GetWriter(ctx), r)
 		return nil
-	})
+	}, mw...)
 }
 
 // FileServerRE serves files from the specified http.Dir but restricts
 // file lookups to require matching the specified regular expression.
 //
 // The path must end in a wildcard with the name '*file'.
-func (m *Mux) FileServerRE(path, regex string, fs http.FileSystem) {
+func (m *Mux) FileServerRE(path, regex string, fs http.FileSystem, mw ...MiddlewareFunc) {
 	// check path
 	checkFSPath(path)
 
@@ -439,7 +439,7 @@ func (m *Mux) FileServerRE(path, regex string, fs http.FileSystem) {
 		r.URL.Path = f
 		fsrv.ServeHTTP(GetWriter(ctx), r)
 		return nil
-	})
+	}, mw...)
 }
 
 func checkFSPath(path string) {
@@ -498,6 +498,11 @@ func (m *Mux) OPTIONS(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc
 // Debugging methods
 
 // PrintRoutes prints all of the routes registered in the Mux.
+// Ordering of Methods is not guaranteed.
+//
+// Routes are printed in the format:
+//
+//	<Method> <path>
 func (m *Mux) PrintRoutes() {
 	for k, v := range m.trees {
 		v.printLeaves(toBytes(k + " "))

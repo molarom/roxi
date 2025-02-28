@@ -40,6 +40,19 @@ func (w *mockResponseWriter) WriteHeader(statusCode int) {
 	w.statusCode = statusCode
 }
 
+// errorResponseWriter is a response writer that returns an error
+type errorResponseWriter struct{}
+
+func (w *errorResponseWriter) Header() http.Header {
+	return http.Header{}
+}
+
+func (w *errorResponseWriter) Write(_ []byte) (int, error) {
+	return 0, fmt.Errorf("write error")
+}
+
+func (w *errorResponseWriter) WriteHeader(_ int) {}
+
 // mockResponder is a Responder and HTTPStatuser used in tests.
 type mockResponder struct {
 	data        []byte
@@ -128,4 +141,13 @@ func Test_Respond(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("WriterError", func(t *testing.T) {
+		ctx := context.Background()
+		ctx = &writerContext{ctx, writerKey, &errorResponseWriter{}}
+
+		if err := Respond(ctx, mockResponder{}); err == nil {
+			t.Errorf("failed to capture error")
+		}
+	})
 }

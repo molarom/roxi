@@ -14,9 +14,10 @@ type Binder interface {
 	Bind(data []byte) error
 }
 
-// Validator is an optional interface a Binder can implement to
-// run additional validation for a bound type.
+// Validator is a Binder that supports running additional
+// validation checks for a bound type.
 type Validator interface {
+	Binder
 	Validate() error
 }
 

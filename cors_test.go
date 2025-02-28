@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func Test_CORS(t *testing.T) {
+func Test_DefaultCORS(t *testing.T) {
 	r, _ := http.NewRequest("OPTIONS", "/", nil)
 	w := httptest.NewRecorder()
 

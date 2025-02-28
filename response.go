@@ -15,9 +15,10 @@ type Responder interface {
 	Response() (data []byte, contentType string, err error)
 }
 
-// HTTPStatuser is an optional interface for a response to implement for
-// setting status codes other than the default 200.
-type HTTPStatuser interface {
+// StatusSetter is a responder that supports setting
+// status codes other than the default 200.
+type StatusSetter interface {
+	Responder
 	StatusCode() int
 }
 
@@ -88,7 +89,7 @@ func Respond(ctx context.Context, data Responder) error {
 	}
 
 	w.Header().Set("Content-Type", ct)
-	if s, ok := data.(HTTPStatuser); ok {
+	if s, ok := data.(StatusSetter); ok {
 		w.WriteHeader(s.StatusCode())
 	}
 
