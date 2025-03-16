@@ -5,8 +5,8 @@ package roxi
 
 import (
 	"context"
-	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -80,7 +80,7 @@ func (c CORS) HandlerFunc() HandlerFunc {
 		}
 
 		if c.MaxAge != 0 {
-			w.Header().Set("Access-Control-Max-Age", fmt.Sprintf("%d", c.MaxAge))
+			w.Header().Set("Access-Control-Max-Age", strconv.Itoa(c.MaxAge))
 		}
 
 		if c.Credentials {

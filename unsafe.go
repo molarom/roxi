@@ -17,7 +17,7 @@ func toBytes(s string) []byte {
 	return unsafe.Slice(unsafe.StringData(s), len(s))
 }
 
-// toString converts a []byte to a string avoiding allocation
+// toString converts a []byte to a string avoiding allocation.
 func toString(bytes []byte) string {
 	// copied from strings.Builder.String
 	return unsafe.String(unsafe.SliceData(bytes), len(bytes))

@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -60,15 +59,6 @@ func Example_wildcards() {
 
 // ----------------------------------------------------------------------
 // Mux Options
-
-func ExampleWithLogger() {
-	// Use slog.Info instead of log.Print
-	mux := roxi.New(
-		roxi.WithLogger(slog.Info),
-	)
-
-	log.Fatal(http.ListenAndServe(":8080", mux))
-}
 
 func ExampleWithMiddleware() {
 	// Simple logging middleware

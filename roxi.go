@@ -11,8 +11,8 @@ package roxi
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	stdpath "path"
@@ -20,6 +20,13 @@ import (
 	"strings"
 	"sync"
 )
+
+// pool for writerContext.
+var ctxPool = sync.Pool{
+	New: func() any {
+		return new(writerContext)
+	},
+}
 
 // HandlerFunc represents a function to handle HTTP requests.
 //
@@ -39,21 +46,19 @@ type HandlerFunc func(ctx context.Context, r *http.Request) error
 // prior to the function's return.
 func (f HandlerFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Setup context.
-	ctx := r.Context()
-	ctx = &writerContext{ctx, writerKey, w}
+	ctx := ctxPool.Get().(*writerContext)
+	ctx.Context = r.Context()
+	ctx.value = w
+	defer ctxPool.Put(ctx)
 
 	if err := f(ctx, r); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
-// Logger represents a function used by the Mux to log internal events.
-type Logger func(msg string, args ...any)
-
 // Mux represents an http.Handler for registering HandlerFuncs to handle
 // HTTP requests.
 type Mux struct {
-	log   Logger
 	trees map[string]*node
 	mw    []MiddlewareFunc
 
@@ -72,12 +77,9 @@ type Mux struct {
 
 	// Panics
 	panicHandler PanicHandler
-
-	// pool for writerContext
-	ctxPool sync.Pool
 }
 
-// New returns a new initalized Mux.
+// New returns a new initialized Mux.
 //
 // No options are configured other than the default error handlers and panic handler.
 func New(opts ...func(*Mux)) *Mux {
@@ -87,14 +89,6 @@ func New(opts ...func(*Mux)) *Mux {
 		notFound:         HandlerFunc(NotFound),
 		errHandler:       HandlerFunc(InternalServerError),
 		panicHandler:     DefaultPanicHandler,
-		ctxPool: sync.Pool{
-			New: func() any {
-				return new(writerContext)
-			},
-		},
-		log: func(msg string, args ...any) {
-			log.Print(msg, ": ", args)
-		},
 	}
 
 	for _, o := range opts {
@@ -125,14 +119,10 @@ func NewWithDefaults(opts ...func(*Mux)) *Mux {
 // ----------------------------------------------------------------------
 // Mux options
 
-// WithLogger replaces the mux's internal logger. By default, it calls log.Print.
-func WithLogger(log Logger) func(*Mux) {
-	return func(m *Mux) {
-		m.log = log
-	}
-}
-
 // WithMiddleware registers global middleware for the mux to execute.
+//
+// Middleware registered directly with the mux will execute prior to
+// any middleware registered with HandlerFuncs.
 func WithMiddleware(mw ...MiddlewareFunc) func(*Mux) {
 	return func(m *Mux) {
 		m.mw = mw
@@ -220,16 +210,14 @@ func WithErrorHandler(handler http.Handler) func(*Mux) {
 // ServeHTTP implements the http.Handler interface.
 func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Setup context.
-	ctx := m.ctxPool.Get().(*writerContext)
+	ctx := ctxPool.Get().(*writerContext)
 	ctx.Context = r.Context()
-	ctx.key = writerKey
 	ctx.value = w
-	defer m.ctxPool.Put(ctx)
+	defer ctxPool.Put(ctx)
 
 	if m.panicHandler != nil {
 		defer func() {
 			if rec := recover(); rec != nil {
-				m.log("recovered", "panic", rec)
 				m.panicHandler(ctx, r, rec)
 			}
 		}()
@@ -274,7 +262,6 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// search for handler
 	if handler, found := root.search(path, r); found {
 		if err := handler(ctx, r); err != nil {
-			m.log("executing handler", "error", err)
 			m.errHandler.ServeHTTP(w, r)
 		}
 		return
@@ -310,7 +297,6 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// found a match, redirect to correct path.
 			if _, found := root.search(path, r); found {
 				r.URL.Path = toString(path)
-				m.log("redirecting to", "path", r.URL.Path)
 				_ = Redirect(ctx, r, r.URL.String(), code)
 				return
 			}
@@ -318,7 +304,6 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// not found case.
-	m.log("no matching route registered", "path", r.URL.Path)
 	m.notFound.ServeHTTP(w, r)
 }
 
@@ -376,9 +361,9 @@ func (m *Mux) Handle(method, path string, handlerFunc HandlerFunc, mw ...Middlew
 	handlerFunc = MiddlewareStack(handlerFunc, m.mw...)
 
 	if m.routeCaseInsensitive {
-		root.insert([]byte(strings.ToLower(path)), handlerFunc)
+		root.insert(toBytes(strings.ToLower(path)), handlerFunc)
 	} else {
-		root.insert([]byte(path), handlerFunc)
+		root.insert(toBytes(path), handlerFunc)
 	}
 }
 
@@ -391,7 +376,9 @@ func (m *Mux) Handle(method, path string, handlerFunc HandlerFunc, mw ...Middlew
 // The path must end in a wildcard with the name '*file'.
 func (m *Mux) FileServer(path string, fs http.FileSystem, mw ...MiddlewareFunc) {
 	// check path
-	checkFSPath(path)
+	if err := checkFSPath(path); err != nil {
+		panic(err)
+	}
 
 	fsrv := http.FileServer(fs)
 	m.GET(path, func(ctx context.Context, r *http.Request) error {
@@ -415,7 +402,9 @@ func (m *Mux) FileServer(path string, fs http.FileSystem, mw ...MiddlewareFunc) 
 // The path must end in a wildcard with the name '*file'.
 func (m *Mux) FileServerRE(path, regex string, fs http.FileSystem, mw ...MiddlewareFunc) {
 	// check path
-	checkFSPath(path)
+	if err := checkFSPath(path); err != nil {
+		panic(err)
+	}
 
 	re := regexp.MustCompile(regex)
 
@@ -423,7 +412,6 @@ func (m *Mux) FileServerRE(path, regex string, fs http.FileSystem, mw ...Middlew
 	m.GET(path, func(ctx context.Context, r *http.Request) error {
 		f := stdpath.Clean(r.PathValue("file"))
 		if !re.MatchString(f) {
-			m.log("regexp did not match", "regex", re, "file", f)
 			m.notFound.ServeHTTP(GetWriter(ctx), r)
 			return nil
 		}
@@ -442,18 +430,20 @@ func (m *Mux) FileServerRE(path, regex string, fs http.FileSystem, mw ...Middlew
 	}, mw...)
 }
 
-func checkFSPath(path string) {
+func checkFSPath(path string) error {
 	if len(path) == 0 {
-		panic("cannot register empty path")
+		return errors.New("cannot register empty path")
 	}
 
 	if len(path) > 0 && path[0] != '/' {
-		panic("path '" + path + "' does not begin with '/'")
+		return errors.New("path '" + path + "' does not begin with '/'")
 	}
 
 	if path[len(path)-6:] != "/*file" {
-		panic("file server path must end in '/*file'")
+		return errors.New("file server path must end in '/*file'")
 	}
+
+	return nil
 }
 
 // ----------------------------------------------------------------------
@@ -461,37 +451,37 @@ func checkFSPath(path string) {
 
 // GET is a helper method for m.Handle("GET", path, handlerFunc, mw...)
 func (m *Mux) GET(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc) {
-	m.Handle("GET", path, handlerFunc, mw...)
+	m.Handle(http.MethodGet, path, handlerFunc, mw...)
 }
 
 // HEAD is a helper method for m.Handle("HEAD", path, handlerFunc, mw...)
 func (m *Mux) HEAD(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc) {
-	m.Handle("HEAD", path, handlerFunc, mw...)
+	m.Handle(http.MethodHead, path, handlerFunc, mw...)
 }
 
 // POST is a helper method for m.Handle("POST", path, handlerFunc, mw...)
 func (m *Mux) POST(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc) {
-	m.Handle("POST", path, handlerFunc, mw...)
+	m.Handle(http.MethodPost, path, handlerFunc, mw...)
 }
 
 // PUT is a helper method for m.Handle("PUT", path, handlerFunc, mw...)
 func (m *Mux) PUT(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc) {
-	m.Handle("PUT", path, handlerFunc, mw...)
+	m.Handle(http.MethodPut, path, handlerFunc, mw...)
 }
 
 // PATCH is a helper method for m.Handle("PATCH", path, handlerFunc, mw...)
 func (m *Mux) PATCH(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc) {
-	m.Handle("PATCH", path, handlerFunc, mw...)
+	m.Handle(http.MethodPatch, path, handlerFunc, mw...)
 }
 
 // DELETE is a helper method for m.Handle("DELETE", path, handlerFunc, mw...)
 func (m *Mux) DELETE(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc) {
-	m.Handle("DELETE", path, handlerFunc, mw...)
+	m.Handle(http.MethodDelete, path, handlerFunc, mw...)
 }
 
 // OPTIONS is a helper method for m.Handle("OPTIONS", path, handlerFunc, mw...)
 func (m *Mux) OPTIONS(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc) {
-	m.Handle("OPTIONS", path, handlerFunc, mw...)
+	m.Handle(http.MethodOptions, path, handlerFunc, mw...)
 }
 
 // ----------------------------------------------------------------------

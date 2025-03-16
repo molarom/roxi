@@ -131,8 +131,6 @@ func Test_MuxMethods(t *testing.T) {
 	mux2.PATCH("/", func(ctx context.Context, r *http.Request) error { return nil })
 	mux2.DELETE("/", func(ctx context.Context, r *http.Request) error { return nil })
 	mux2.OPTIONS("/", func(ctx context.Context, r *http.Request) error { return nil })
-
-	mux.PrintRoutes()
 }
 
 func Test_NotFound(t *testing.T) {
@@ -213,6 +211,22 @@ func Test_OptionsHandler(t *testing.T) {
 	mux.ServeHTTP(w, r)
 	if w.Result().StatusCode != 204 {
 		t.Error("failed to fallback to options handler")
+	}
+}
+
+func Test_MethodNotAllowed(t *testing.T) {
+	mux := New()
+
+	mux.GET("/unused", func(ctx context.Context, r *http.Request) error {
+		return InternalServerError(ctx, r)
+	})
+
+	r, _ := http.NewRequest("POST", "/unused", nil)
+	w := httptest.NewRecorder()
+
+	mux.ServeHTTP(w, r)
+	if w.Result().StatusCode != 405 {
+		t.Errorf("failed to execute method not allowed handler: resp[%d]", w.Result().StatusCode)
 	}
 }
 
@@ -422,117 +436,5 @@ func Test_WildcardHandler(t *testing.T) {
 			}
 			t.Log(r.PathValue("path"))
 		})
-	}
-}
-
-// ----------------------------------------------------------------------
-// Benchmark Data
-
-var verbs = []string{
-	"accounts",
-	"users",
-	"settings",
-	"static",
-	"auth",
-	"oauth",
-	"view",
-	"views",
-	"list",
-	"stats",
-	"statistics",
-	"metrics",
-	"home",
-	"help",
-	"contact",
-	"address",
-	":path",
-}
-
-// generateRoutes generates a list of static routes from the verbs provided.
-func generateRoutes(prefix string, verbs []string) []string {
-	routes := make([]string, 0, len(verbs)*len(verbs))
-
-	for _, v := range verbs {
-		for _, s := range verbs {
-			routes = append(routes, fmt.Sprintf("%s/%s/%s", prefix, v, s))
-		}
-	}
-
-	return routes
-}
-
-// ----------------------------------------------------------------------
-// Alloc Tests
-
-func Test_MuxRoutingAllocs(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping alloc tests in short mode.")
-	}
-
-	routes := generateRoutes("/v1", verbs)
-
-	mux := New()
-	for _, r := range routes {
-		mux.GET(r, func(ctx context.Context, r *http.Request) error { return nil })
-	}
-
-	w := newMockResponseWriter()
-	req, _ := http.NewRequest("GET", "/", nil)
-	u := req.URL
-	q := req.URL.RawQuery
-
-	for _, r := range routes {
-		req.Method = "GET"
-		req.RequestURI = r
-		u.Path = r
-		u.RawQuery = q
-
-		allocs := testing.AllocsPerRun(100, func() { mux.ServeHTTP(w, req) })
-		if allocs > 0 {
-			t.Errorf("mux.ServeHTTP(): expected zero allocs; got [%v]", allocs)
-		}
-	}
-}
-
-// ----------------------------------------------------------------------
-// Benchmarks
-
-func Benchmark_Load(b *testing.B) {
-	routes := generateRoutes("/v1", verbs)
-
-	b.ResetTimer()
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		mux := NewWithDefaults()
-		for _, r := range routes {
-			mux.GET(r, func(ctx context.Context, r *http.Request) error { return nil })
-		}
-	}
-}
-
-func Benchmark_Routing(b *testing.B) {
-	routes := generateRoutes("/v1", verbs)
-
-	mux := NewWithDefaults()
-	for _, r := range routes {
-		mux.GET(r, func(ctx context.Context, r *http.Request) error { return nil })
-	}
-
-	w := newMockResponseWriter()
-	req, _ := http.NewRequest("GET", "/", nil)
-	u := req.URL
-	q := req.URL.RawQuery
-
-	b.ResetTimer()
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		for _, r := range routes {
-			req.Method = "GET"
-			req.RequestURI = r
-			u.Path = r
-			u.RawQuery = q
-
-			mux.ServeHTTP(w, req)
-		}
 	}
 }

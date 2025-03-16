@@ -1,7 +1,7 @@
 image: golang:1.23
 
 stages:
-  #  - lint
+  - lint
   - test
   - prepare
   - release
@@ -11,21 +11,21 @@ before_script:
   - go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.5
   - go install mvdan.cc/gofumpt@latest
 
-#lint:
-#  stage: lint
-#  script:
-#    - gofumpt -d
-#    - golangci-lint run
-#
-#test:
-#  stage: test
-#  script:
-#    - make test
-#
-#test-race:
-#  stage: test
-#  script:
-#    - make test-race
+lint:
+  stage: lint
+  script:
+    - gofumpt -d
+    - golangci-lint run
+
+test:
+  stage: test
+  script:
+    - make test
+
+test-race:
+  stage: test
+  script:
+    - make test-race
 
 coverage:
   stage: test
