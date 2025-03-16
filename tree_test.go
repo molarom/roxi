@@ -135,102 +135,37 @@ func Test_ParseParams(t *testing.T) {
 
 func Benchmark_ParseParams(b *testing.B) {
 	tests := []struct {
-		name    string
-		wcPath  string
-		path    string
-		params  []string
-		lastIdx int
-		ok      bool
+		name   string
+		wcPath string
+		path   string
 	}{
 		{
-			"Parse",
+			"Short",
 			"/path/:with/:param",
 			"/path/sub/subsub",
-			[]string{
-				"with",
-				"param",
-			},
-			16,
-			true,
 		},
 		{
-			"ParseMismatchedSegments",
-			"/user/group/:group_id",
-			"/user/group",
-			[]string{},
-			11,
-			false,
+			"Long",
+			"/path" + strings.Repeat("/:param", 80),
+			"/path" + strings.Repeat("/path", 80),
 		},
 		{
-			"ParseMismatchedNoLeadingSlash",
-			":path",
-			"foo/bar",
-			[]string{},
-			3,
-			false,
-		},
-		{
-			"ParseMatchNoLeadingSlash",
-			"foo/:bar",
-			"foo/bar",
-			[]string{"bar"},
-			7,
-			true,
-		},
-		{
-			"ParseWithTrailingSlash",
-			":bar/",
-			"foo/",
-			[]string{"bar"},
-			4,
-			true,
-		},
-		{
-			"ParseMatchPartialMiddle",
-			"/path/:bar/b",
-			"/path/s/baz",
-			[]string{"bar"},
-			9,
-			true,
-		},
-		{
-			"ParseWildcardShort",
+			"WildcardShort",
 			"/path/*wildcard",
-			"/path/single",
-			[]string{"wildcard"},
-			11,
-			true,
+			"/path/sub/subsub",
 		},
 		{
-			"ParseWildcardLong",
+			"WildcardLong",
 			"/path/*wildcard",
 			"/path" + strings.Repeat("/path", 80),
-			[]string{"wildcard"},
-			404,
-			true,
 		},
 	}
 
 	for _, tt := range tests {
+		req, _ := http.NewRequest("GET", tt.path, nil)
 		b.Run(tt.name, func(b *testing.B) {
-			req, _ := http.NewRequest("GET", tt.path, nil)
 			for i := 0; i < b.N; i++ {
-
-				lastIdx, ok := parseParams(toBytes(tt.wcPath), toBytes(req.URL.Path), req)
-				if ok != tt.ok {
-					b.Errorf("expected: [%v]; got [%v]", tt.ok, ok)
-				}
-
-				if lastIdx != tt.lastIdx {
-					b.Errorf("expected: [%d]; got [%d]", tt.lastIdx, lastIdx)
-				}
-
-				// Check path value gets set correctly.
-				for _, v := range tt.params {
-					if req.PathValue(v) == "" {
-						b.Errorf("expected path value [%s] to be set", v)
-					}
-				}
+				_, _ = parseParams(toBytes(tt.wcPath), toBytes(req.URL.Path), req)
 			}
 		})
 	}

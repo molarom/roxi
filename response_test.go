@@ -40,7 +40,7 @@ func (w *mockResponseWriter) WriteHeader(statusCode int) {
 	w.statusCode = statusCode
 }
 
-// errorResponseWriter is a response writer that returns an error
+// errorResponseWriter is a response writer that returns an error.
 type errorResponseWriter struct{}
 
 func (w *errorResponseWriter) Header() http.Header {
@@ -119,7 +119,7 @@ func Test_Respond(t *testing.T) {
 	for _, tt := range tests {
 		// setup context.
 		ctx := context.Background()
-		ctx = &writerContext{ctx, writerKey, newMockResponseWriter()}
+		ctx = &writerContext{ctx, newMockResponseWriter()}
 
 		t.Run(tt.name, func(t *testing.T) {
 			if err := Respond(ctx, tt.data); err != nil && !tt.shouldErr {
@@ -144,7 +144,7 @@ func Test_Respond(t *testing.T) {
 
 	t.Run("WriterError", func(t *testing.T) {
 		ctx := context.Background()
-		ctx = &writerContext{ctx, writerKey, &errorResponseWriter{}}
+		ctx = &writerContext{ctx, &errorResponseWriter{}}
 
 		if err := Respond(ctx, mockResponder{}); err == nil {
 			t.Errorf("failed to capture error")

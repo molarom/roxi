@@ -10,7 +10,7 @@ func Test_ContextValue(t *testing.T) {
 
 	ctx := context.WithValue(context.Background(), testKey(1), "test")
 
-	ctx = &writerContext{ctx, writerKey, newMockResponseWriter()}
+	ctx = &writerContext{ctx, newMockResponseWriter()}
 
 	v, ok := ctx.Value(testKey(1)).(string)
 	if !ok {
@@ -23,7 +23,7 @@ func Test_ContextValue(t *testing.T) {
 }
 
 func Test_ContextNilWriter(t *testing.T) {
-	ctx := &writerContext{context.Background(), writerKey, nil}
+	ctx := &writerContext{context.Background(), nil}
 
 	if w := GetWriter(ctx); w != nil {
 		t.Errorf("unknown value returned from context: %v", w)

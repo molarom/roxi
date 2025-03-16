@@ -13,16 +13,16 @@ import (
 	"strings"
 )
 
-// edge represents an edge node
+// edge represents an edge node.
 type edge struct {
 	label byte
 	node  *node
 }
 
-// edges is a slice of edge nodes
+// edges is a slice of edge nodes.
 type edges []edge
 
-// get uses binary search to locate a matching node
+// get uses binary search to locate a matching node.
 func (e edges) get(label byte) (*node, bool) {
 	l := len(e)
 
@@ -52,7 +52,7 @@ func (e edges) add(n edge) edges {
 func (e edges) binarySearch(n int, label byte) int {
 	i, j := 0, n
 	for i < j {
-		h := int(uint(i+j) >> 1)
+		h := int(uint(i+j) >> 1) // #nosec G115
 		if !(e[h].label >= label) {
 			i = h + 1
 		} else {
@@ -67,7 +67,7 @@ func (e edges) binarySearch(n int, label byte) int {
 // ----------------------------------------------------------------------
 // node
 
-// node represents a radix tree node
+// node represents a radix tree node.
 //
 // This tree is just a tailored version of
 // gitlab.com/romlaor/radix for http routing.
@@ -160,16 +160,22 @@ func (n *node) insert(key []byte, value HandlerFunc) {
 		return
 	}
 
-	pc, file, line, _ := runtime.Caller(2)
-	fn := filepath.Base(runtime.FuncForPC(pc).Name())
+	if current.leaf || current.value != nil {
+		pc, file, line, _ := runtime.Caller(3)
+		fn := filepath.Base(runtime.FuncForPC(pc).Name())
 
-	panic("Route '" + string(insKeyFull) +
-		"' registered in '" +
-		fmt.Sprintf("%s() %s:%d", fn, file, line) +
-		"' has previously been registered.")
+		panic("Route '" + string(insKeyFull) +
+			"' registered in '" +
+			fmt.Sprintf("%s() %s:%d", fn, file, line) +
+			"' has previously been registered.")
+	}
+
+	// fix registration bug.
+	current.value = value
+	current.leaf = true
 }
 
-// search returns the longest prefix match for a key
+// search returns the longest prefix match for a key.
 func (n *node) search(key []byte, r *http.Request) (HandlerFunc, bool) {
 	current := n
 	keyLen := len(key)
@@ -267,7 +273,7 @@ func prefixLength(s1, s2 []byte) int {
 // ----------------------------------------------------------------------
 // params
 
-// parseParams sets the path value for any registered path variables in b
+// parseParams sets the path value for any registered path variables in b.
 func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 	// TODO: tidy all of this
 	lenB := len(b)
@@ -400,5 +406,5 @@ func countParams(b []byte) (count int) {
 		}
 	}
 
-	return
+	return count
 }

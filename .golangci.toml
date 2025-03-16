@@ -1,0 +1,32 @@
+[run]
+timeout = '5m'
+
+[linters]
+enable = [
+    'asciicheck',
+    'errcheck',
+    'errorlint',
+    'ineffassign',
+    'godot',
+    'gofumpt',
+    'goimports',
+    'gosimple',
+    'govet',
+    'misspell',
+    'nakedret',
+    'nilerr',
+    'nolintlint',
+    'perfsprint',
+    'staticcheck',
+    'usestdlibvars',
+    'unused',
+    'wastedassign',
+]
+
+[[issues.exclude-rules]]
+path = '_test\.go'
+linters = [ 
+    "perfsprint",
+    "usestdlibvars",
+]
+

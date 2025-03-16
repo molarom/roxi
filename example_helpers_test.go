@@ -11,7 +11,7 @@ import (
 	"gitlab.com/romalor/roxi"
 )
 
-// HomePage implements the Responder interface
+// HomePage implements the Responder interface.
 type HomePage []byte
 
 func (r HomePage) Response() ([]byte, string, error) {

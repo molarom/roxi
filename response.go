@@ -5,6 +5,7 @@ package roxi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"runtime"
@@ -25,9 +26,9 @@ type StatusSetter interface {
 // NoContent is a helper responder for 204 responses.
 var NoContent = emptyResponse{http.StatusNoContent}
 
-// Default error response handlers
+// Default error response handlers.
 var (
-	// NotFound is a default 404 handler
+	// NotFound is a default 404 handler.
 	NotFound = func(ctx context.Context, r *http.Request) error {
 		return Respond(ctx, errorResponse{
 			http.StatusNotFound,
@@ -51,7 +52,7 @@ var (
 		})
 	}
 
-	// DefaultPanicHandler is an optional handler that executes when a panic is recovered.
+	// DefaultPanicHandler is a default handler that executes when a panic is recovered.
 	DefaultPanicHandler = func(ctx context.Context, r *http.Request, err interface{}) {
 		buf := make([]byte, 65536)
 		buf = buf[:runtime.Stack(buf, false)]
@@ -74,7 +75,7 @@ func Respond(ctx context.Context, data Responder) error {
 	w := GetWriter(ctx)
 
 	if data == nil {
-		return fmt.Errorf("respond: data is nil")
+		return errors.New("respond: data is nil")
 	}
 
 	switch v := data.(type) {
