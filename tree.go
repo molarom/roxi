@@ -335,6 +335,7 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 		} else {
 			r.SetPathValue(toString(b[start:end]), "/")
 		}
+		return j, true
 	}
 
 	// if we reached the end for both,
