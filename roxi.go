@@ -383,6 +383,7 @@ func (m *Mux) FileServer(path string, fs http.FileSystem, mw ...MiddlewareFunc) 
 				return err
 			}
 			m.notFound.ServeHTTP(GetWriter(ctx), r)
+			return nil
 		}
 
 		r.URL.Path = f
