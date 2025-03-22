@@ -264,7 +264,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if m.optionsHandler != nil {
-		if allow := m.allowed(path, r); allow != "" {
+		if allow := m.allowed(r.Method, path); allow != "" {
 			w.Header().Set("Allow", allow)
 			m.optionsHandler.ServeHTTP(w, r)
 			return
@@ -272,7 +272,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if m.methodNotAllowed != nil {
-		if allow := m.allowed(path, r); allow != "" {
+		if allow := m.allowed(r.Method, path); allow != "" {
 			w.Header().Set("Allow", allow)
 			m.methodNotAllowed.ServeHTTP(w, r)
 			return
@@ -283,16 +283,16 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	m.notFound.ServeHTTP(w, r)
 }
 
-func (m *Mux) allowed(path []byte, r *http.Request) string {
+func (m *Mux) allowed(rMethod string, path []byte) string {
 	allowed := make([]string, 0, 9)
 	if m.optionsHandler != nil {
 		allowed = append(allowed, http.MethodOptions)
 	}
 	for method, t := range m.trees {
-		if method == http.MethodOptions || method == r.Method {
+		if method == http.MethodOptions || method == rMethod {
 			continue
 		}
-		if _, ok := t.search(path, r); ok {
+		if _, ok := t.search(path, nil); ok {
 			allowed = append(allowed, method)
 		}
 	}

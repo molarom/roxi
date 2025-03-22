@@ -230,7 +230,7 @@ func Test_MethodNotAllowed(t *testing.T) {
 	}
 	allow := w.Result().Header.Get("Allow")
 	if allow != "GET" {
-		t.Errorf("expected: [%v]; got[%v]", "GET", allow)
+		t.Errorf("expected: [%v]; got: [%v]", "GET", allow)
 	}
 }
 
@@ -252,7 +252,7 @@ func Test_SetAllowHeaderWithOptions(t *testing.T) {
 
 	// ordering isn't guaranteed.
 	if !(res == "OPTIONS,GET" || res == "GET,OPTIONS") {
-		t.Errorf("expected [%s]; got [%s]", "GET,OPTIONS", res)
+		t.Errorf("expected [%s]; gotL [%s]", "GET,OPTIONS", res)
 	}
 }
 

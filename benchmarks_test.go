@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 )
 
@@ -82,78 +81,84 @@ func Benchmark_Mux(b *testing.B) {
 		method string
 		path   string
 	}{
-		{
-			"Single",
-			buildMux(singleRoute{}),
-			http.MethodGet,
-			"/path",
-		},
-		{
-			"Many",
-			buildMux(manyRoutes{}),
-			http.MethodGet,
-			"/v1/path/path",
-		},
-		{
-			"SingleWithMiddleware",
-			buildMux(singleRoute{}, WithMiddleware(mw("1"))),
-			http.MethodGet,
-			"/path",
-		},
-		{
-			"ManyWithMiddleware",
-			buildMux(manyRoutes{}, WithMiddleware(mw("1"))),
-			http.MethodGet,
-			"/v1/path/path",
-		},
-		{
-			"SingleWithManyMiddleware",
-			buildMux(singleRoute{}, WithMiddleware(mw("1"), mw("2"), mw("3"), mw("4"))),
-			http.MethodGet,
-			"/path",
-		},
-		{
-			"ManyWithManyMiddleware",
-			buildMux(manyRoutes{}, WithMiddleware(mw("1"), mw("2"), mw("3"), mw("4"))),
-			http.MethodGet,
-			"/v1/path/path",
-		},
-		{
-			"Params",
-			buildMux(paramsRoute{}),
-			http.MethodGet,
-			"/path/banana/banana/banana/terracotta/pie",
-		},
-		{
-			"NotFound",
-			buildMux(singleRoute{}),
-			http.MethodGet,
-			"/foo/bar",
-		},
+		// {
+		// 	"Single",
+		// 	buildMux(singleRoute{}),
+		// 	http.MethodGet,
+		// 	"/path",
+		// },
+		// {
+		// 	"Many",
+		// 	buildMux(manyRoutes{}),
+		// 	http.MethodGet,
+		// 	"/v1/path/path",
+		// },
+		// {
+		// 	"SingleWithMiddleware",
+		// 	buildMux(singleRoute{}, WithMiddleware(mw("1"))),
+		// 	http.MethodGet,
+		// 	"/path",
+		// },
+		// {
+		// 	"ManyWithMiddleware",
+		// 	buildMux(manyRoutes{}, WithMiddleware(mw("1"))),
+		// 	http.MethodGet,
+		// 	"/v1/path/path",
+		// },
+		// {
+		// 	"SingleWithManyMiddleware",
+		// 	buildMux(singleRoute{}, WithMiddleware(mw("1"), mw("2"), mw("3"), mw("4"))),
+		// 	http.MethodGet,
+		// 	"/path",
+		// },
+		// {
+		// 	"ManyWithManyMiddleware",
+		// 	buildMux(manyRoutes{}, WithMiddleware(mw("1"), mw("2"), mw("3"), mw("4"))),
+		// 	http.MethodGet,
+		// 	"/v1/path/path",
+		// },
+		// {
+		// 	"Params",
+		// 	buildMux(paramsRoute{}),
+		// 	http.MethodGet,
+		// 	"/path/banana/banana/banana/terracotta/pie",
+		// },
+		// {
+		// 	"NotFound",
+		// 	buildMux(singleRoute{}),
+		// 	http.MethodGet,
+		// 	"/foo/bar",
+		// },
 		{
 			"MethodNotAllowed",
-			buildMux(singleRoute{}, WithOptionsHandler(DefaultCORS)),
+			buildMux(singleRoute{}),
 			http.MethodPost,
 			"/path",
 		},
 		{
-			"OptionsAllMethods",
-			buildMux(allbutPOST{}, WithOptionsHandler(DefaultCORS)),
+			"MethodNotAllowedAllMethods",
+			buildMux(allbutPOST{}),
 			http.MethodPost,
 			"/path",
 		},
-		{
-			"RespondBytes",
-			buildMux(bRespRoute{}),
-			http.MethodGet,
-			"/path",
-		},
-		{
-			"RespondJSON",
-			buildMux(jsonRespRoute{}),
-			http.MethodGet,
-			"/path",
-		},
+		//{
+		//	"OptionsAllMethods",
+		//	buildMux(allbutPOST{}, WithOptionsHandler(DefaultCORS)),
+		//	http.MethodPost,
+		//	"/path",
+		//},
+		// {
+		// 	"RespondBytes",
+		// 	buildMux(bRespRoute{}),
+		// 	http.MethodGet,
+		// 	"/path",
+		// },
+		// {
+		// 	"RespondJSON",
+		// 	buildMux(jsonRespRoute{}),
+		// 	http.MethodGet,
+		// 	"/path",
+		// },
 	}
 
 	for _, tt := range muxes {
@@ -167,32 +172,32 @@ func Benchmark_Mux(b *testing.B) {
 	}
 }
 
-func Benchmark_MuxParallel(b *testing.B) {
-	muxes := []struct {
-		name string
-		mux  http.Handler
-	}{
-		{
-			"Many",
-			buildMux(manyRoutes{}),
-		},
-		{
-			"ManyWithManyMiddleware",
-			buildMux(manyRoutes{}, WithMiddleware(mw("1"), mw("2"), mw("3"), mw("4"))),
-		},
-	}
-
-	for _, tt := range muxes {
-		b.RunParallel(func(p *testing.PB) {
-			for p.Next() {
-				r, _ := http.NewRequest(http.MethodGet, "/v1/path/path", nil)
-				w := httptest.NewRecorder()
-
-				tt.mux.ServeHTTP(w, r)
-			}
-		})
-	}
-}
+// func Benchmark_MuxParallel(b *testing.B) {
+// 	muxes := []struct {
+// 		name string
+// 		mux  http.Handler
+// 	}{
+// 		{
+// 			"Many",
+// 			buildMux(manyRoutes{}),
+// 		},
+// 		{
+// 			"ManyWithManyMiddleware",
+// 			buildMux(manyRoutes{}, WithMiddleware(mw("1"), mw("2"), mw("3"), mw("4"))),
+// 		},
+// 	}
+//
+// 	for _, tt := range muxes {
+// 		b.RunParallel(func(p *testing.PB) {
+// 			for p.Next() {
+// 				r, _ := http.NewRequest(http.MethodGet, "/v1/path/path", nil)
+// 				w := httptest.NewRecorder()
+//
+// 				tt.mux.ServeHTTP(w, r)
+// 			}
+// 		})
+// 	}
+// }
 
 // ----------------------------------------------------------------------
 // Responders

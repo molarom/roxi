@@ -53,7 +53,7 @@ var (
 	}
 
 	// DefaultPanicHandler is a default handler that executes when a panic is recovered.
-	DefaultPanicHandler = func(ctx context.Context, r *http.Request, err interface{}) {
+	DefaultPanicHandler = func(ctx context.Context, r *http.Request, err any) {
 		buf := make([]byte, 65536)
 		buf = buf[:runtime.Stack(buf, false)]
 		fmt.Printf("roxi: recovered panic %v: %s\n", err, buf)

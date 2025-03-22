@@ -295,7 +295,10 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 			// grab the path value
 			pEnd := indexSlash(path, lenPath, j)
 
-			r.SetPathValue(toString(b[i+1:end]), toString(path[j:pEnd]))
+			if r != nil {
+				r.SetPathValue(toString(b[i+1:end]), toString(path[j:pEnd]))
+			}
+
 			i, j = end, pEnd
 
 			continue
@@ -325,16 +328,24 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 			}
 			pEnd := j + 1
 
+			// early return for lookups
+			if r == nil {
+				return j, true
+			}
+
 			// bounds check for leading slash
 			if pStart == 1 {
 				r.SetPathValue(toString(b[start:end]), toString(path[pStart-1:pEnd]))
 			} else {
 				r.SetPathValue(toString(b[start:end]), toString(path[pStart:pEnd]))
 			}
-			// edge case, empty path matched on wildcard.
-		} else {
+		}
+
+		// edge case, empty path matched on wildcard.
+		if lenPath == 0 && r != nil {
 			r.SetPathValue(toString(b[start:end]), "/")
 		}
+
 		return j, true
 	}
 
