@@ -11,7 +11,7 @@ import (
 type ctxKey int
 
 const (
-	writerKey ctxKey = 0
+	writerKey ctxKey = iota
 )
 
 // writerContext stores the http.ResponseWriter to pass to HandlerFuncs.
@@ -29,9 +29,11 @@ func (c *writerContext) Value(key any) any {
 
 // GetWriter returns the http.ResponseWriter from the context.
 func GetWriter(ctx context.Context) http.ResponseWriter {
-	v, ok := ctx.Value(writerKey).(http.ResponseWriter)
-	if !ok {
-		return nil
+	if v, ok := ctx.(*writerContext); ok {
+		return v.value
 	}
-	return v
+	if v, ok := ctx.Value(writerKey).(http.ResponseWriter); ok {
+		return v
+	}
+	return nil
 }
