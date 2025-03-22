@@ -44,19 +44,7 @@ var defaultCORS = CORS{
 	Vary:        true,
 }
 
-// DefaultCORS is an optional OPTIONS handler with reasonable defaults set for responding to preflight requests.
-//
-// Values Set:
-//
-//	CORS{
-//	    Origins:     []string{"*"},
-//	    Methods:     []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
-//	    Expose:      []string{"Content-Encoding"},
-//	    Headers:     []string{"Accept", "Content-Type", "Content-Length", "Accept-Encoding", "Origin", "Authorization"},
-//	    Credentials: true,
-//	    MaxAge:      86400,
-//	    Vary:        true,
-//	}
+// DefaultCORS is an OPTIONS handler with reasonable defaults set for responding to preflight requests.
 var DefaultCORS = defaultCORS.HandlerFunc()
 
 // Handler returns a request handler for preflight requests.
