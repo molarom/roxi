@@ -6,10 +6,12 @@ package roxi
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -25,11 +27,12 @@ type edges []edge
 // get uses binary search to locate a matching node.
 func (e edges) get(label byte) (*node, bool) {
 	l := len(e)
+	if l > 0 {
+		idx := e.binarySearch(l, label)
 
-	idx := e.binarySearch(l, label)
-
-	if idx < l && e[idx].label == label {
-		return e[idx].node, true
+		if idx < l && e[idx].label == label {
+			return e[idx].node, true
+		}
 	}
 	return nil, false
 }
@@ -81,10 +84,17 @@ type node struct {
 
 // insert inserts a new key value pair into the tree.
 func (n *node) insert(key []byte, value HandlerFunc) {
+	// validate params
+	params := countParams(key)
+	if params != 0 {
+		if err := validateParams(key, params); err != nil {
+			panic(err)
+		}
+	}
+
 	insKeyFull := key
 	cKeyFull := bytes.NewBuffer(make([]byte, 0, len(key)))
 
-	params := countParams(key)
 	current := n
 	for len(key) > 0 {
 		firstChar := key[0]
@@ -106,6 +116,7 @@ func (n *node) insert(key []byte, value HandlerFunc) {
 
 		cKeyLen := len(child.key)
 		prefixLen := prefixLength(key, child.key)
+
 		if prefixLen == cKeyLen {
 			key = key[prefixLen:]
 			current = child
@@ -113,12 +124,17 @@ func (n *node) insert(key []byte, value HandlerFunc) {
 			continue
 		}
 
-		// match on param, we've got a conflict.
-		if child.param && params != 0 && key[prefixLen-1] == ':' {
-			cKeyFull.Write(child.key)
-			panic("Only one path variable can be registered per segment: \n" +
-				"Route: '" + string(insKeyFull) + "'\n" +
-				"Conflicts with: '" + cKeyFull.String() + "'")
+		// mismatch on param, check for conflict.
+		if child.param && params != 0 {
+			v := (key[prefixLen-1] == ':' && child.key[prefixLen-1] == ':')
+			wc := (key[prefixLen-1] == '*' && child.key[prefixLen-1] == '*')
+
+			if v || wc {
+				cKeyFull.Write(child.key)
+				panic("Only one path variable and wildcard can be registered per path segment: \n" +
+					"Route: '" + string(insKeyFull) + "'\n" +
+					"Conflicts with: '" + cKeyFull.String() + "'")
+			}
 		}
 
 		// partial, split and update node
@@ -259,12 +275,11 @@ func (n *node) printLeaves(parent []byte) {
 }
 
 // prefixLength calculates the common prefix length between s1 and s2.
-func prefixLength(s1, s2 []byte) int {
+func prefixLength(s1, s2 []byte) (length int) {
 	l := len(s1)
 	if sz := len(s2); len(s1) > sz {
 		l = sz
 	}
-	length := 0
 	for ; length < l && s1[length] == s2[length]; length++ {
 	}
 	return length
@@ -275,7 +290,6 @@ func prefixLength(s1, s2 []byte) int {
 
 // parseParams sets the path value for any registered path variables in b.
 func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
-	// TODO: tidy all of this
 	lenB := len(b)
 	lenPath := len(path)
 
@@ -290,13 +304,11 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 
 		// Check for param token
 		if b[i] == ':' {
-			end := indexSlash(b, lenB, i)
-
-			// grab the path value
-			pEnd := indexSlash(path, lenPath, j)
+			param, end, _ := pathSegment(b, i+1, lenB)
+			pValue, pEnd, _ := pathSegment(path, j, lenPath)
 
 			if r != nil {
-				r.SetPathValue(toString(b[i+1:end]), toString(path[j:pEnd]))
+				r.SetPathValue(toString(param), toString(pValue))
 			}
 
 			i, j = end, pEnd
@@ -314,59 +326,44 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 		break
 	}
 
-	// wildcard is the unlikely case, so check this last.
-	if checkWildCard(b, i, lenB) {
-		start := i + 1
-		for ; i < lenB-1; i++ {
-		}
-		end := i + 1
-
-		// grab the path value
-		if lenPath > 0 {
-			pStart := j
-			for ; j < lenPath-1; j++ {
-			}
-			pEnd := j + 1
-
-			// early return for lookups
-			if r == nil {
-				return j, true
-			}
-
-			// bounds check for leading slash
-			if pStart == 1 {
-				r.SetPathValue(toString(b[start:end]), toString(path[pStart-1:pEnd]))
-			} else {
-				r.SetPathValue(toString(b[start:end]), toString(path[pStart:pEnd]))
-			}
-		}
-
-		// edge case, empty path matched on wildcard.
-		if lenPath == 0 && r != nil {
-			r.SetPathValue(toString(b[start:end]), "/")
-		}
-
+	// reached the end, early return
+	if i == lenB && j == lenPath {
 		return j, true
 	}
 
-	// if we reached the end for both,
-	// or end of b and prev char are eq,
-	// it's a match.
-	return j, (j >= lenPath-1 && i >= lenB-1) || (path[j-1] == b[i-1] && j-1 != lenPath-1)
-}
+	// wildcard is the unlikely case, so check this last.
+	if checkWildCard(b, i, lenB) {
+		param, _, _ := pathSegment(b, i+1, lenB)
 
-func indexSlash(b []byte, l, start int) int {
-	if l == 0 {
-		return 0
-	}
-	end := start
-	for ; b[end] != '/' && end < l-1; end++ {
+		// early return for simple lookups
+		if r == nil {
+			return j, true
+		}
+
+		// grab the path value
+		if lenPath > 0 {
+
+			// bounds check for leading slash
+			if j == 1 {
+				j = j - 1
+			}
+
+			r.SetPathValue(toString(param), toString(path[j:lenPath]))
+		} else {
+			r.SetPathValue(toString(param), "/")
+		}
+
+		if lenPath != 0 {
+			return lenPath - 1, true
+		}
+		return 0, true
 	}
 
-	if b[end] != '/' && end == l-1 {
-		return end + 1
+	// not at the end, return if chars are different.
+	if i == 0 || j == 0 {
+		return 0, (path[0] == b[0] && lenPath-1 != 0)
 	}
-	return end
+	return j, (path[j-1] == b[i-1] && lenPath-1 != j-1)
 }
 
 func checkWildCard(b []byte, idx, l int) bool {
@@ -379,44 +376,77 @@ func checkWildCard(b []byte, idx, l int) bool {
 	return true
 }
 
-// countParams counts the number of params in b.
 func countParams(b []byte) (count int) {
-	i := 0
 	lenB := len(b)
-	for i < lenB {
-
+	for i := 0; i < lenB; i++ {
 		switch b[i] {
-		case ':':
+		case ':', '*':
 			count++
-			for ; b[i] != '/' && i < lenB-1; i++ {
-				// Check for bad variable names.
-				if b[i+1] == ':' || b[i+1] == '*' {
-					panic("path variables cannot contain the following characters: {" +
-						"':', '*'" +
-						"}\n" +
-						"Offending path: '" + string(b) + "'")
-				}
-			}
-		case '*':
-			count++
-			for ; i < lenB-1; i++ {
-				// handle bad wildcard path position
-				if b[i+1] == '/' {
-					panic("wildcard must be set at the end of the path:\n" +
-						"Offending path: '" + string(b) + "'")
-				}
-			}
-		default:
-			i++
-			continue
 		}
+	}
+	return count
+}
 
-		// empty name case.
-		if b[i] == ':' || b[i] == '*' {
-			panic("path variable has no name: \n" +
-				"Offending path: '" + string(b) + "'")
+func pathSegment(b []byte, start, length int) ([]byte, int, bool) {
+	if length == 0 || start >= length {
+		return nil, -1, false
+	}
+
+	end := start
+	for ; end < length; end++ {
+		switch b[end] {
+		case '/':
+			return b[start:end], end, true
+		case '*', ':':
+			return nil, -1, false
 		}
 	}
 
-	return count
+	return b[start:end], end, true
+}
+
+func validateParams(b []byte, total int) error {
+	i, count := 0, 0
+	lenB := len(b)
+	for ; i < lenB; i++ {
+		switch b[i] {
+		case ':':
+			param, _, valid := pathSegment(b, i+1, lenB)
+			if !valid {
+				return errors.New("path variables cannot contain the following characters: {" +
+					"':', '*'" +
+					"}\n" +
+					"path: '" + string(b) + "' is not valid.")
+			}
+			if len(param) == 0 {
+				return errors.New("missing name for variable in path: \n" +
+					"'" + string(b) + "'")
+			}
+			count++
+		case '*':
+			param, end, valid := pathSegment(b, i+1, lenB)
+			if !valid {
+				return errors.New("path variables cannot contain the following characters: {" +
+					"':', '*'" +
+					"}\n" +
+					"path: '" + string(b) + "' is not valid.")
+			}
+			if len(param) == 0 {
+				return errors.New("missing name for variable in path: \n" +
+					"'" + string(b) + "'")
+			}
+			if end != lenB {
+				return errors.New("wildcard must be set at the end of the path:\n" +
+					"path: '" + string(b) + "' is not valid.")
+			}
+			count++
+		}
+	}
+	// sanity check
+	if count != total {
+		return errors.New("variable count mismatch for path:\n'" +
+			string(b) +
+			"'; got[" + strconv.Itoa(count) + "]; want[" + strconv.Itoa(total) + "]")
+	}
+	return nil
 }
