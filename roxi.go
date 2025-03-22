@@ -63,12 +63,14 @@ type Mux struct {
 	mw    []MiddlewareFunc
 
 	// Routing
-	setAllowHeader       bool
 	routeCaseInsensitive bool
 
 	// Redirects
 	redirectTrailingSlash bool
 	redirectCleanPath     bool
+
+	// OPTIONS hander
+	optionsHandler http.Handler
 
 	// Error handlers
 	methodNotAllowed http.Handler
@@ -109,7 +111,6 @@ func New(opts ...func(*Mux)) *Mux {
 func NewWithDefaults(opts ...func(*Mux)) *Mux {
 	return New(
 		append([]func(*Mux){
-			WithSetAllowHeader(),
 			WithRedirectCleanPath(),
 			WithRedirectTrailingSlash(),
 		}, opts...)...,
@@ -142,21 +143,10 @@ func WithPanicHandler(handler PanicHandler) func(*Mux) {
 	}
 }
 
-// WithOptionsHandler is a helper method to add a default OPTIONS handler to the Mux.
-//
-// It is equivalent to calling:
-//
-//	m.Handler("OPTIONS", "/*path", handler)
+// WithOptionsHandler sets a handler for the mux to handle OPTIONS requests.
 func WithOptionsHandler(handler http.Handler) func(*Mux) {
 	return func(m *Mux) {
-		m.Handler("OPTIONS", "/*path", handler)
-	}
-}
-
-// WithSetAllowHeader enables the mux to set the Allow header on 405 responses.
-func WithSetAllowHeader() func(*Mux) {
-	return func(m *Mux) {
-		m.setAllowHeader = true
+		m.optionsHandler = handler
 	}
 }
 
@@ -198,6 +188,8 @@ func WithNotFoundHandler(handler http.Handler) func(*Mux) {
 }
 
 // WithErrorHandler replaces the default 500 response handler.
+//
+// A nil handler will be ignored.
 func WithErrorHandler(handler http.Handler) func(*Mux) {
 	return func(m *Mux) {
 		m.errHandler = handler
@@ -225,86 +217,89 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	path := toBytes(r.URL.Path)
 
-	root, found := m.trees[r.Method]
-	if !found {
-		if m.setAllowHeader {
-			allowed := make([]string, 0, 9)
-			for method, t := range m.trees {
-				if _, ok := t.search(path, r); !ok {
-					continue
-				}
-				allowed = append(allowed, method)
+	if root := m.trees[r.Method]; root != nil {
+		// search for handler
+		if handler, found := root.search(path, r); found {
+			if err := handler(ctx, r); err != nil {
+				m.errHandler.ServeHTTP(w, r)
 			}
-
-			allow := strings.Join(allowed, ",")
-			if allow != "" {
-				found = true
-				w.Header().Set("Allow", allow)
-			}
-		} else {
-			for _, t := range m.trees {
-				if _, ok := t.search(path, r); !ok {
-					continue
-				}
-
-				// break iteration early if we're not using the match
-				found = true
-				break
-			}
+			return
 		}
 
-		if found {
+		// don't redirect if proxy connection or root path are requested.
+		if r.Method != http.MethodConnect && !bytes.Equal(path, []byte{'/'}) {
+			// following the same redirect behavior as httprouter
+			code := http.StatusMovedPermanently
+			if r.Method != http.MethodGet {
+				code = http.StatusPermanentRedirect
+			}
+
+			// check if any redirect behavior is enabled.
+			redirect := (m.redirectCleanPath || m.redirectTrailingSlash || m.routeCaseInsensitive)
+
+			// step through each enabled path scrubbing option
+			if m.redirectCleanPath {
+				path = CleanPath(r.URL.Path)
+			}
+
+			if m.redirectTrailingSlash {
+				if len(path) > 1 && path[len(path)-1] == '/' {
+					path = path[:len(path)-1]
+				}
+			}
+
+			if m.routeCaseInsensitive {
+				path = bytes.ToLower(path)
+			}
+
+			if redirect {
+				// found a match, redirect to correct path.
+				if _, found := root.search(path, r); found {
+					r.URL.Path = toString(path)
+					_ = Redirect(ctx, r, r.URL.String(), code)
+					return
+				}
+			}
+		}
+	}
+
+	if m.optionsHandler != nil {
+		if allow := m.allowed(path, r); allow != "" {
+			w.Header().Set("Allow", allow)
+			m.optionsHandler.ServeHTTP(w, r)
+			return
+		}
+	}
+
+	if m.methodNotAllowed != nil {
+		if allow := m.allowed(path, r); allow != "" {
+			w.Header().Set("Allow", allow)
 			m.methodNotAllowed.ServeHTTP(w, r)
 			return
 		}
 	}
 
-	// search for handler
-	if handler, found := root.search(path, r); found {
-		if err := handler(ctx, r); err != nil {
-			m.errHandler.ServeHTTP(w, r)
-		}
-		return
-	}
-
-	// don't redirect if proxy connection or root path are requested.
-	if r.Method != http.MethodConnect && !bytes.Equal(path, []byte{'/'}) {
-		// following the same redirect behavior as httprouter
-		code := http.StatusMovedPermanently
-		if r.Method != http.MethodGet {
-			code = http.StatusPermanentRedirect
-		}
-
-		// check if any redirect behavior is enabled.
-		redirect := (m.redirectCleanPath || m.redirectTrailingSlash || m.routeCaseInsensitive)
-
-		// step through each enabled path scrubbing option
-		if m.redirectCleanPath {
-			path = CleanPath(r.URL.Path)
-		}
-
-		if m.redirectTrailingSlash {
-			if len(path) > 1 && path[len(path)-1] == '/' {
-				path = path[:len(path)-1]
-			}
-		}
-
-		if m.routeCaseInsensitive {
-			path = bytes.ToLower(path)
-		}
-
-		if redirect {
-			// found a match, redirect to correct path.
-			if _, found := root.search(path, r); found {
-				r.URL.Path = toString(path)
-				_ = Redirect(ctx, r, r.URL.String(), code)
-				return
-			}
-		}
-	}
-
 	// not found case.
 	m.notFound.ServeHTTP(w, r)
+}
+
+func (m *Mux) allowed(path []byte, r *http.Request) string {
+	allowed := make([]string, 0, 9)
+	if m.optionsHandler != nil {
+		allowed = append(allowed, http.MethodOptions)
+	}
+	for method, t := range m.trees {
+		if method == http.MethodOptions || method == r.Method {
+			continue
+		}
+		if _, ok := t.search(path, r); ok {
+			allowed = append(allowed, method)
+		}
+	}
+	if len(allowed) != 0 {
+		return strings.Join(allowed, ",")
+	}
+	return ""
 }
 
 // Handler registers an http.Handler to handle requests at the given
@@ -439,7 +434,7 @@ func checkFSPath(path string) error {
 		return errors.New("path '" + path + "' does not begin with '/'")
 	}
 
-	if path[len(path)-6:] != "/*file" {
+	if len(path) < 6 || path[len(path)-6:] != "/*file" {
 		return errors.New("file server path must end in '/*file'")
 	}
 

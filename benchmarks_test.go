@@ -125,6 +125,24 @@ func Benchmark_Mux(b *testing.B) {
 			"/path/banana/banana/banana/terracotta/pie",
 		},
 		{
+			"NotFound",
+			buildMux(singleRoute{}),
+			http.MethodGet,
+			"/foo/bar",
+		},
+		{
+			"MethodNotAllowed",
+			buildMux(singleRoute{}, WithOptionsHandler(DefaultCORS)),
+			http.MethodPost,
+			"/path",
+		},
+		{
+			"OptionsAllMethods",
+			buildMux(allbutPOST{}, WithOptionsHandler(DefaultCORS)),
+			http.MethodPost,
+			"/path",
+		},
+		{
 			"RespondBytes",
 			buildMux(bRespRoute{}),
 			http.MethodGet,
@@ -134,18 +152,6 @@ func Benchmark_Mux(b *testing.B) {
 			"RespondJSON",
 			buildMux(jsonRespRoute{}),
 			http.MethodGet,
-			"/path",
-		},
-		{
-			"NotFound",
-			buildMux(singleRoute{}),
-			http.MethodGet,
-			"/foo/bar",
-		},
-		{
-			"SetAllow",
-			buildMux(singleRoute{}, WithSetAllowHeader()),
-			http.MethodPost,
 			"/path",
 		},
 	}
@@ -243,6 +249,16 @@ func (r manyRoutes) Add(mux *Mux) {
 	routes := generateRoutes("/v1", verbs)
 	for _, r := range routes {
 		mux.GET(r, func(ctx context.Context, r *http.Request) error { return nil })
+	}
+}
+
+type allbutPOST struct{}
+
+func (r allbutPOST) Add(mux *Mux) {
+	for v := range httpMethods {
+		if v != "POST" {
+			mux.Handle(v, "/path", func(ctx context.Context, r *http.Request) error { return nil })
+		}
 	}
 }
 

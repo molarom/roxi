@@ -228,28 +228,15 @@ func Test_MethodNotAllowed(t *testing.T) {
 	if w.Result().StatusCode != 405 {
 		t.Errorf("failed to execute method not allowed handler: resp[%d]", w.Result().StatusCode)
 	}
-}
-
-func Test_SetAllowHeader(t *testing.T) {
-	mux := New(WithSetAllowHeader())
-
-	mux.GET("/unused", func(ctx context.Context, r *http.Request) error {
-		return InternalServerError(ctx, r)
-	})
-
-	r, _ := http.NewRequest("POST", "/unused", nil)
-	w := httptest.NewRecorder()
-
-	mux.ServeHTTP(w, r)
-	if res := w.Result().Header.Get("Allow"); res != "GET" {
-		t.Errorf("expected [%s]; got [%s]", "GET", res)
+	allow := w.Result().Header.Get("Allow")
+	if allow != "GET" {
+		t.Errorf("expected: [%v]; got[%v]", "GET", allow)
 	}
 }
 
 func Test_SetAllowHeaderWithOptions(t *testing.T) {
 	mux := New(
 		WithOptionsHandler(DefaultCORS),
-		WithSetAllowHeader(),
 	)
 
 	mux.GET("/unused", func(ctx context.Context, r *http.Request) error {
