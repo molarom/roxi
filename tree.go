@@ -342,13 +342,7 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 
 		// grab the path value
 		if lenPath > 0 {
-
-			// bounds check for leading slash
-			if j == 1 {
-				j = j - 1
-			}
-
-			r.SetPathValue(toString(param), toString(path[j:lenPath]))
+			r.SetPathValue(toString(param), "/"+toString(path[j:lenPath]))
 		} else {
 			r.SetPathValue(toString(param), "/")
 		}
