@@ -365,8 +365,7 @@ func (m *Mux) Handle(method, path string, handlerFunc HandlerFunc, mw ...Middlew
 // ----------------------------------------------------------------------
 // File Server methods
 
-// FileServer wraps http.FileServer to allow the mux's error handlers to be
-// called over the internal http.FileServer ones.
+// FileServer wraps http.FileServer to serve files from the provided http.FileSystem.
 //
 // The path must end in a wildcard with the name '*file'.
 func (m *Mux) FileServer(path string, fs http.FileSystem, mw ...MiddlewareFunc) {
