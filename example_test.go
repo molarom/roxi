@@ -193,12 +193,3 @@ func ExampleMux_FileServer() {
 
 	log.Fatal(http.ListenAndServe(":8080", mux))
 }
-
-func ExampleMux_FileServerRE() {
-	mux := roxi.New()
-
-	// Serve all files in /tmp ending in '.html' or '.js' under /files
-	mux.FileServerRE("/files/*file", `.*\.(html|js)$`, http.Dir(os.TempDir()))
-
-	log.Fatal(http.ListenAndServe(":8080", mux))
-}

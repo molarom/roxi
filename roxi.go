@@ -14,9 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
-	stdpath "path"
-	"regexp"
 	"strings"
 	"sync"
 )
@@ -50,6 +47,8 @@ func (f HandlerFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx.Context = r.Context()
 	ctx.value = w
 	defer ctxPool.Put(ctx)
+
+	r.WithContext(ctx)
 
 	if err := f(ctx, r); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -104,7 +103,6 @@ func New(opts ...func(*Mux)) *Mux {
 // It is equivalent to calling:
 //
 //	New(append([]func(*Mux){
-//			WithSetAllowHeader(),
 //			WithRedirectCleanPath(),
 //			WithRedirectTrailingSlash(),
 //		}, opts...)...)
@@ -206,6 +204,8 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx.Context = r.Context()
 	ctx.value = w
 	defer ctxPool.Put(ctx)
+
+	r.WithContext(ctx)
 
 	if m.panicHandler != nil {
 		defer func() {
@@ -352,8 +352,8 @@ func (m *Mux) Handle(method, path string, handlerFunc HandlerFunc, mw ...Middlew
 		m.trees[method] = root
 	}
 
-	handlerFunc = MiddlewareStack(handlerFunc, mw...)
 	handlerFunc = MiddlewareStack(handlerFunc, m.mw...)
+	handlerFunc = MiddlewareStack(handlerFunc, mw...)
 
 	if m.routeCaseInsensitive {
 		root.insert(toBytes(strings.ToLower(path)), handlerFunc)
@@ -377,50 +377,7 @@ func (m *Mux) FileServer(path string, fs http.FileSystem, mw ...MiddlewareFunc) 
 
 	fsrv := http.FileServer(fs)
 	m.GET(path, func(ctx context.Context, r *http.Request) error {
-		f := stdpath.Clean(r.PathValue("file"))
-		if _, err := fs.Open(f); err != nil {
-			if !os.IsNotExist(err) {
-				return err
-			}
-			m.notFound.ServeHTTP(GetWriter(ctx), r)
-			return nil
-		}
-
-		r.URL.Path = f
-		fsrv.ServeHTTP(GetWriter(ctx), r)
-		return nil
-	}, mw...)
-}
-
-// FileServerRE serves files from the specified http.Dir but restricts
-// file lookups to require matching the specified regular expression.
-//
-// The path must end in a wildcard with the name '*file'.
-func (m *Mux) FileServerRE(path, regex string, fs http.FileSystem, mw ...MiddlewareFunc) {
-	// check path
-	if err := checkFSPath(path); err != nil {
-		panic(err)
-	}
-
-	re := regexp.MustCompile(regex)
-
-	fsrv := http.FileServer(fs)
-	m.GET(path, func(ctx context.Context, r *http.Request) error {
-		f := stdpath.Clean(r.PathValue("file"))
-		if !re.MatchString(f) {
-			m.notFound.ServeHTTP(GetWriter(ctx), r)
-			return nil
-		}
-
-		if _, err := fs.Open(f); err != nil {
-			if !os.IsNotExist(err) {
-				return err
-			}
-			m.notFound.ServeHTTP(GetWriter(ctx), r)
-			return nil
-		}
-
-		r.URL.Path = f
+		r.URL.Path = r.PathValue("file")
 		fsrv.ServeHTTP(GetWriter(ctx), r)
 		return nil
 	}, mw...)
