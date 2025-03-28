@@ -48,8 +48,6 @@ func (f HandlerFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx.value = w
 	defer ctxPool.Put(ctx)
 
-	r.WithContext(ctx)
-
 	if err := f(ctx, r); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -204,8 +202,6 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx.Context = r.Context()
 	ctx.value = w
 	defer ctxPool.Put(ctx)
-
-	r.WithContext(ctx)
 
 	if m.panicHandler != nil {
 		defer func() {
