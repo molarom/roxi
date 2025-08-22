@@ -76,9 +76,10 @@ func (e edges) binarySearch(n int, label byte) int {
 // gitlab.com/romlaor/radix for http routing.
 type node struct {
 	key   []byte
-	value HandlerFunc
+	route []byte
 	param bool
 	leaf  bool
+	value HandlerFunc
 	edges edges
 }
 
@@ -106,6 +107,7 @@ func (n *node) insert(key []byte, value HandlerFunc) {
 				label: firstChar,
 				node: &node{
 					key:   key,
+					route: insKeyFull,
 					value: value,
 					param: countParams(key) != 0,
 					leaf:  true,
@@ -141,6 +143,7 @@ func (n *node) insert(key []byte, value HandlerFunc) {
 		splitNode := &node{
 			key:   child.key[prefixLen:],
 			value: child.value,
+			route: child.route,
 			param: child.param,
 			leaf:  child.leaf,
 			edges: child.edges,
@@ -163,6 +166,7 @@ func (n *node) insert(key []byte, value HandlerFunc) {
 				label: key[prefixLen:][0],
 				node: &node{
 					key:   key[prefixLen:],
+					route: insKeyFull,
 					value: value,
 					param: countParams(key[prefixLen:]) != 0,
 					leaf:  true,
@@ -170,6 +174,7 @@ func (n *node) insert(key []byte, value HandlerFunc) {
 			})
 		} else {
 			// no remainder, set value on child
+			child.route = insKeyFull
 			child.value = value
 			child.leaf = true
 		}
@@ -243,6 +248,10 @@ func (n *node) search(key []byte, r *http.Request) (HandlerFunc, bool) {
 		return current.value, false
 	}
 
+	if r != nil {
+		r.Pattern = toString(current.route)
+	}
+
 	return current.value, current.leaf
 }
 
@@ -259,18 +268,18 @@ func (n *node) print(level int) {
 	}
 }
 
-// printleaves recursively prints all of the leaf node keys.
-func (n *node) printLeaves(parent []byte) {
+// printRoutes recursively prints all of the routes.
+func (n *node) printRoutes(method string) {
 	if n == nil {
 		return
 	}
 
 	if n.leaf {
-		fmt.Println(toString(parent))
+		fmt.Println(method, string(n.route))
 	}
 
 	for _, child := range n.edges {
-		child.node.printLeaves(append(parent, child.node.key...))
+		child.node.printRoutes(method)
 	}
 }
 

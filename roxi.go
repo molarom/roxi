@@ -443,7 +443,7 @@ func (m *Mux) OPTIONS(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc
 //	<Method> <path>
 func (m *Mux) PrintRoutes() {
 	for k, v := range m.trees {
-		v.printLeaves(toBytes(k + " "))
+		v.printRoutes(k)
 	}
 }
 

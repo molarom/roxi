@@ -257,6 +257,22 @@ func Test_SetAllowHeaderWithOptions(t *testing.T) {
 	}
 }
 
+func Test_SetRequestPattern(t *testing.T) {
+	mux := New()
+
+	mux.GET("/foo", func(ctx context.Context, r *http.Request) error {
+		return Respond(ctx, NoContent)
+	})
+
+	r, _ := http.NewRequest("GET", "/foo", nil)
+	w := httptest.NewRecorder()
+
+	mux.ServeHTTP(w, r)
+	if r.Pattern != "/foo" {
+		t.Errorf("expected: [%v]; got[%v]", "/foo", r.Pattern)
+	}
+}
+
 func Test_Middleware(t *testing.T) {
 	middleware := false
 	mw := func(next HandlerFunc) HandlerFunc {
@@ -363,40 +379,6 @@ func Test_FileServer(t *testing.T) {
 		})
 	}
 }
-
-// func Test_FileServerRE(t *testing.T) {
-// 	mux := NewWithDefaults()
-//
-// 	fs := &mockFS{}
-// 	mux.FileServerRE("/files/*file", `.*\.(html|js|jpeg)`, fs)
-//
-// 	tests := []struct {
-// 		name       string
-// 		path       string
-// 		shouldOpen bool
-// 	}{
-// 		{"Match", "/files/index.html", true},
-// 		{"NoMatch", "/files/file.txt", false},
-// 		{"NoREMatch", "/files/asset.png", false},
-// 		{"ReadError", "/files/error.jpeg", false},
-// 		{"CleanPath", "/files/./index.html", true},
-// 	}
-//
-// 	for _, tt := range tests {
-// 		fs.opened = false
-// 		t.Run(tt.name, func(t *testing.T) {
-// 			fs.opened = false
-// 			r, _ := http.NewRequest("GET", tt.path, nil)
-// 			w := httptest.NewRecorder()
-//
-// 			mux.ServeHTTP(w, r)
-// 			if fs.opened != tt.shouldOpen {
-// 				t.Errorf("expected: [%v]; got: [%v]", tt.shouldOpen, fs.opened)
-// 				t.Errorf("file value: [%v]", r.PathValue("file"))
-// 			}
-// 		})
-// 	}
-// }
 
 // ----------------------------------------------------------------------
 // Edge cases
