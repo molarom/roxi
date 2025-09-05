@@ -435,16 +435,18 @@ func (m *Mux) OPTIONS(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc
 // ----------------------------------------------------------------------
 // Debugging methods
 
-// PrintRoutes prints all of the routes registered in the Mux.
-// Ordering of Methods is not guaranteed.
-//
-// Routes are printed in the format:
-//
-//	<Method> <path>
-func (m *Mux) PrintRoutes() {
-	for k, v := range m.trees {
-		v.printRoutes(k)
+// Routes returns all of the routes registered in the Mux as a map.
+// The map keys are HTTP methods, and the values are slices of paths for that method.
+func (m *Mux) Routes() map[string][]string {
+	routes := make(map[string][]string)
+	for method, tree := range m.trees {
+		var methodRoutes []string
+		tree.collectRoutes(&methodRoutes)
+		if len(methodRoutes) > 0 {
+			routes[method] = methodRoutes
+		}
 	}
+	return routes
 }
 
 // PrintTree prints the contents of the routing tree.

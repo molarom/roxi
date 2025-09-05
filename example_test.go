@@ -47,7 +47,11 @@ func Example_wildcards() {
 	mux.POST("/foo/quux/corge/grault", h)
 
 	// Print registered routes.
-	mux.PrintRoutes()
+	for method, routes := range mux.Routes() {
+		for _, route := range routes {
+			fmt.Printf("%s %s\n", method, route)
+		}
+	}
 	// Unordered output:
 	// GET /*catchall
 	// GET /foo/:baz

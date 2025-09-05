@@ -268,18 +268,18 @@ func (n *node) print(level int) {
 	}
 }
 
-// printRoutes recursively prints all of the routes.
-func (n *node) printRoutes(method string) {
+// collectRoutes recursively collects all of the routes.
+func (n *node) collectRoutes(routes *[]string) {
 	if n == nil {
 		return
 	}
 
 	if n.leaf {
-		fmt.Println(method, string(n.route))
+		*routes = append(*routes, string(n.route))
 	}
 
 	for _, child := range n.edges {
-		child.node.printRoutes(method)
+		child.node.collectRoutes(routes)
 	}
 }
 
