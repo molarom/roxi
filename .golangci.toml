@@ -1,32 +1,31 @@
+version = '2'
+
 [run]
 timeout = '5m'
 
 [linters]
 enable = [
-    'asciicheck',
-    'errcheck',
-    'errorlint',
-    'ineffassign',
-    'godot',
-    'gofumpt',
-    'goimports',
-    'gosimple',
-    'govet',
-    'misspell',
-    'nakedret',
-    'nilerr',
-    'nolintlint',
-    'perfsprint',
-    'staticcheck',
-    'usestdlibvars',
-    'unused',
-    'wastedassign',
+  'asciicheck',
+  'errorlint',
+  'godot',
+  'misspell',
+  'nakedret',
+  'nilerr',
+  'nolintlint',
+  'perfsprint',
+  'usestdlibvars',
+  'wastedassign'
 ]
 
-[[issues.exclude-rules]]
+[[linters.exclusions.rules]]
+linters = [
+  'perfsprint',
+  'usestdlibvars'
+]
 path = '_test\.go'
-linters = [ 
-    "perfsprint",
-    "usestdlibvars",
-]
 
+[formatters]
+enable = [
+  'gofumpt',
+  'goimports'
+]
