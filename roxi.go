@@ -258,6 +258,18 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	// handle OPTIONS requests in compliance with RFC 7231.
+	if r.Method == http.MethodOptions {
+		if allow := m.allowed(r.Method, path); allow != "" {
+			w.Header().Set("Allow", allow)
+			if m.optionsHandler != nil {
+				m.optionsHandler.ServeHTTP(w, r)
+			} else {
+				w.WriteHeader(http.StatusOK)
+			}
+			return
+		}
+	}
 
 	if m.optionsHandler != nil {
 		if allow := m.allowed(r.Method, path); allow != "" {
@@ -285,15 +297,20 @@ func (m *Mux) allowed(rMethod string, path []byte) string {
 		allowed = append(allowed, http.MethodOptions)
 	}
 	for method, t := range m.trees {
-		if method == http.MethodOptions || method == rMethod {
+		if method == rMethod {
 			continue
 		}
 		if _, ok := t.search(path, nil); ok {
 			allowed = append(allowed, method)
 		}
 	}
+	// always include OPTIONS if any method is registered.
+	if len(allowed) > 0 && rMethod == http.MethodOptions {
+		allowed = append(allowed, http.MethodOptions)
+	}
+
 	if len(allowed) != 0 {
-		return strings.Join(allowed, ",")
+		return strings.Join(allowed, ", ")
 	}
 	return ""
 }

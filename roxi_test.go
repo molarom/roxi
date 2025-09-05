@@ -252,8 +252,8 @@ func Test_SetAllowHeaderWithOptions(t *testing.T) {
 	res := w.Result().Header.Get("Allow")
 
 	// ordering isn't guaranteed.
-	if !(res == "OPTIONS,GET" || res == "GET,OPTIONS") {
-		t.Errorf("expected [%s]; gotL [%s]", "GET,OPTIONS", res)
+	if res != "OPTIONS, GET" && res != "GET, OPTIONS" {
+		t.Errorf("expected [%s]; got [%s]", "GET, OPTIONS", res)
 	}
 }
 
