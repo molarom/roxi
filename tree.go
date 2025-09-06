@@ -369,7 +369,7 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 			copy(path[j+1:], path[j:])
 			path[j] = byte('/')
 
-			r.SetPathValue(toString(param), toString(path[j:lenPath]))
+			r.SetPathValue(toString(param), toString(path[j:lenPath+1]))
 		} else {
 			r.SetPathValue(toString(param), "/")
 		}
