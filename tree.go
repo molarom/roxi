@@ -394,16 +394,10 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 
 		// grab the path value
 		if lenPath > 0 {
-			// extend buf to avoid bounds checks.
-			path = append(make([]byte, 0, len(path)+1), path...)
-
-			// insert leading "/"
-			var zero byte
-			path = append(path, zero)
-			copy(path[j+1:], path[j:])
-			path[j] = byte('/')
-
-			r.SetPathValue(toString(param), toString(path[j:lenPath+1]))
+			wcValue := make([]byte, 1+lenPath-j)
+			wcValue[0] = '/'
+			copy(wcValue[1:], path[j:])
+			r.SetPathValue(toString(param), toString(wcValue))
 		} else {
 			r.SetPathValue(toString(param), "/")
 		}

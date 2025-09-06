@@ -35,10 +35,6 @@ var httpMethods = map[string]methodFlag{
 	http.MethodTrace:   TRACE,
 }
 
-var flagToMethod = [...]string{
-	"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "CONNECT", "OPTIONS", "TRACE",
-}
-
 // String implements the fmt.Stringer interface.
 func (m methodFlag) String() string {
 	switch m {
