@@ -310,18 +310,27 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 
 	i, j := 0, 0
 	for i < lenB && j < lenPath {
-
 		// Check for param token
 		if b[i] == ':' {
-			param, end, _ := pathSegment(b, i+1, lenB)
-			pValue, pEnd, _ := pathSegment(path, j, lenPath)
-
-			if r != nil {
-				r.SetPathValue(toString(param), toString(pValue))
+			paramStart := i + 1
+			paramEnd := paramStart
+			for paramEnd < lenB && b[paramEnd] != '/' {
+				paramEnd++
 			}
 
-			i, j = end, pEnd
+			valueStart := j
+			valueEnd := valueStart
+			for valueEnd < lenPath && path[valueEnd] != '/' {
+				valueEnd++
+			}
 
+			if r != nil {
+				paramName := toString(b[paramStart:paramEnd])
+				paramValue := toString(path[valueStart:valueEnd])
+				r.SetPathValue(paramName, paramValue)
+			}
+
+			i, j = paramEnd, valueEnd
 			continue
 		}
 
