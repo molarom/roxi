@@ -274,7 +274,7 @@ func (r allbutPOST) Add(mux *Mux) {
 func mw(value string) MiddlewareFunc {
 	return func(handle HandlerFunc) HandlerFunc {
 		return func(ctx context.Context, r *http.Request) error {
-			fmt.Fprintf(GetWriter(ctx), "%s", value)
+			_, _ = fmt.Fprintf(GetWriter(ctx), "%s", value)
 			return nil
 		}
 	}
