@@ -303,7 +303,7 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 	lenPath := len(path)
 
 	if lenPath == 0 {
-		if !(checkWildCard(b, 0, lenB) || checkWildCard(b, 1, lenB)) {
+		if !(isWildCard(b, 0, lenB) || isWildCard(b, 1, lenB)) {
 			return 0, false
 		}
 	}
@@ -350,7 +350,7 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 	}
 
 	// wildcard is the unlikely case, so check this last.
-	if checkWildCard(b, i, lenB) {
+	if isWildCard(b, i, lenB) {
 		param, _, _ := pathSegment(b, i+1, lenB)
 
 		// early return for simple lookups
@@ -360,7 +360,16 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 
 		// grab the path value
 		if lenPath > 0 {
-			r.SetPathValue(toString(param), "/"+toString(path[j:lenPath]))
+			// Extend buf to avoid bounds checks.
+			path = append(make([]byte, 0, len(path)+1), path...)
+
+			// Insert leading "/"
+			var zero byte
+			path = append(path, zero)
+			copy(path[j+1:], path[j:])
+			path[j] = byte('/')
+
+			r.SetPathValue(toString(param), toString(path[j:lenPath]))
 		} else {
 			r.SetPathValue(toString(param), "/")
 		}
@@ -378,7 +387,7 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 	return j, (path[j-1] == b[i-1] && lenPath-1 != j-1)
 }
 
-func checkWildCard(b []byte, idx, l int) bool {
+func isWildCard(b []byte, idx, l int) bool {
 	if idx >= l {
 		return false
 	}
