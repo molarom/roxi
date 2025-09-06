@@ -20,7 +20,7 @@ type writerContext struct {
 	value http.ResponseWriter
 }
 
-func (c *writerContext) Value(key any) any {
+func (c writerContext) Value(key any) any {
 	if key == writerKey {
 		return c.value
 	}
@@ -36,4 +36,18 @@ func GetWriter(ctx context.Context) http.ResponseWriter {
 		return v
 	}
 	return nil
+}
+
+// SetWriter allows setting a custom http.ResponseWriter in the context.
+func SetWriter(ctx context.Context, w http.ResponseWriter) context.Context {
+	v, ok := ctx.(*writerContext)
+	if !ok {
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		return writerContext{ctx, w}
+	}
+
+	v.value = w
+	return v
 }
