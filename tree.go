@@ -337,15 +337,16 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 	lenPath := len(path)
 
 	if lenPath == 0 {
-		if !(isWildCard(b, 0, lenB) || isWildCard(b, 1, lenB)) {
+		if !isWildCard(b, 0, lenB) && !isWildCard(b, 1, lenB) {
 			return 0, false
 		}
 	}
 
 	i, j := 0, 0
 	for i < lenB && j < lenPath {
+		char := b[i]
 		// Check for param token
-		if b[i] == ':' {
+		if char == ':' {
 			paramStart := i + 1
 			paramEnd := paramStart
 			for paramEnd < lenB && b[paramEnd] != '/' {
@@ -369,7 +370,7 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 		}
 
 		// advance the scan if we're outside of a variable
-		if b[i] == path[j] {
+		if char == path[j] {
 			i++
 			j++
 			continue
@@ -413,27 +414,6 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 		return 0, (path[0] == b[0] && lenPath-1 != 0)
 	}
 	return j, (path[j-1] == b[i-1] && lenPath-1 != j-1)
-}
-
-func isWildCard(b []byte, idx, l int) bool {
-	if idx >= l {
-		return false
-	}
-	if b[idx] != '*' {
-		return false
-	}
-	return true
-}
-
-func countParams(b []byte) (count int) {
-	lenB := len(b)
-	for i := 0; i < lenB; i++ {
-		switch b[i] {
-		case ':', '*':
-			count++
-		}
-	}
-	return count
 }
 
 func pathSegment(b []byte, start, length int) ([]byte, int, bool) {
@@ -498,4 +478,25 @@ func validateParams(b []byte, total int) error {
 			"'; got[" + strconv.Itoa(count) + "]; want[" + strconv.Itoa(total) + "]")
 	}
 	return nil
+}
+
+// ----------------------------------------------------------------------
+// Helper methods
+
+func isWildCard(b []byte, idx, l int) bool {
+	if idx >= l {
+		return false
+	}
+	return b[idx] == '*'
+}
+
+func countParams(b []byte) (count int) {
+	lenB := len(b)
+	for i := 0; i < lenB; i++ {
+		switch b[i] {
+		case ':', '*':
+			count++
+		}
+	}
+	return count
 }
