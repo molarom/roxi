@@ -25,6 +25,19 @@ var ctxPool = sync.Pool{
 	},
 }
 
+func getContext() *writerContext {
+	ctx, _ := ctxPool.Get().(*writerContext)
+	ctx.Context = nil
+	ctx.value = nil
+	return ctx
+}
+
+func putContext(ctx *writerContext) {
+	if ctx != nil {
+		ctxPool.Put(ctx)
+	}
+}
+
 // HandlerFunc represents a function to handle HTTP requests.
 //
 // The http.ResponseWriter can be retrieved from the context with:
@@ -42,11 +55,18 @@ type HandlerFunc func(ctx context.Context, r *http.Request) error
 // If this behavior is undesired, the error must be handled and set to nil
 // prior to the function's return.
 func (f HandlerFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Setup context.
-	ctx := ctxPool.Get().(*writerContext)
-	ctx.Context = r.Context()
-	ctx.value = w
-	defer ctxPool.Put(ctx)
+	// check if we're passed a *writerContext (likely: Middleware)
+	rCtx := r.Context()
+	ctx, ok := rCtx.(*writerContext)
+	if ok {
+		ctx.value = w
+	} else {
+		// setup context otherwise.
+		ctx = ctxPool.Get().(*writerContext)
+		ctx.Context = r.Context()
+		ctx.value = w
+		defer ctxPool.Put(ctx)
+	}
 
 	if err := f(ctx, r); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -56,8 +76,9 @@ func (f HandlerFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Mux represents an http.Handler for registering HandlerFuncs to handle
 // HTTP requests.
 type Mux struct {
-	trees map[string]*node
-	mw    []MiddlewareFunc
+	trees   map[string]*node
+	mw      []MiddlewareFunc
+	ctxPool sync.Pool
 
 	// Routing
 	routeCaseInsensitive bool
@@ -88,6 +109,11 @@ func New(opts ...func(*Mux)) *Mux {
 		notFound:         HandlerFunc(NotFound),
 		errHandler:       HandlerFunc(InternalServerError),
 		panicHandler:     DefaultPanicHandler,
+		ctxPool: sync.Pool{
+			New: func() any {
+				return new(writerContext)
+			},
+		},
 	}
 
 	for _, o := range opts {
@@ -198,10 +224,10 @@ func WithErrorHandler(handler http.Handler) func(*Mux) {
 // ServeHTTP implements the http.Handler interface.
 func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Setup context.
-	ctx := ctxPool.Get().(*writerContext)
+	ctx := getContext()
 	ctx.Context = r.Context()
 	ctx.value = w
-	defer ctxPool.Put(ctx)
+	defer putContext(ctx)
 
 	if m.panicHandler != nil {
 		defer func() {
@@ -245,19 +271,20 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if m.routeCaseInsensitive {
-				path = bytes.ToLower(path)
+				path = toBytes(strings.ToLower(toString(path)))
 			}
 
 			if redirect {
 				// found a match, redirect to correct path.
 				if _, found := root.search(path, r); found {
 					r.URL.Path = toString(path)
-					_ = Redirect(ctx, r, r.URL.String(), code)
+					http.Redirect(w, r, r.URL.String(), code)
 					return
 				}
 			}
 		}
 	}
+
 	// handle OPTIONS requests in compliance with RFC 7231.
 	if r.Method == http.MethodOptions {
 		if allow := m.allowed(r.Method, path); allow != "" {
