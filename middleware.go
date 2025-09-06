@@ -14,11 +14,26 @@ type MiddlewareFunc func(handle HandlerFunc) HandlerFunc
 //	                LoggingMW, // 1
 //	                ErrorsMW)  // 2
 func MiddlewareStack(handler HandlerFunc, mw ...MiddlewareFunc) HandlerFunc {
-	for i := len(mw) - 1; i >= 0; i-- {
-		mwFn := mw[i]
-		if mwFn != nil {
-			handler = mwFn(handler)
+	validMW := make([]MiddlewareFunc, 0, len(mw))
+	for _, m := range mw {
+		if m != nil {
+			validMW = append(validMW, m)
 		}
+	}
+
+	// no middleware, immediately return handler
+	if len(validMW) == 0 {
+		return handler
+	}
+
+	// single middleware, wrap and return.
+	if len(validMW) == 1 {
+		return validMW[0](handler)
+	}
+
+	// > 1, build chain.
+	for i := len(validMW) - 1; i >= 0; i-- {
+		handler = validMW[i](handler)
 	}
 	return handler
 }
