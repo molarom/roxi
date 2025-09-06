@@ -225,13 +225,15 @@ func Test_MethodNotAllowed(t *testing.T) {
 	r, _ := http.NewRequest("POST", "/unused", nil)
 	w := httptest.NewRecorder()
 
+	t.Log(mux.Routes())
+
 	mux.ServeHTTP(w, r)
 	if w.Result().StatusCode != 405 {
 		t.Errorf("failed to execute method not allowed handler: resp[%d]", w.Result().StatusCode)
 	}
 	allow := w.Result().Header.Get("Allow")
-	if allow != "GET" {
-		t.Errorf("expected: [%v]; got: [%v]", "GET", allow)
+	if allow != "GET, OPTIONS" {
+		t.Errorf("expected: [%v]; got: [%v]", "GET, OPTIONS", allow)
 	}
 }
 

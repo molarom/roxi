@@ -75,16 +75,17 @@ func (e edges) binarySearch(n int, label byte) int {
 // This tree is just a tailored version of
 // gitlab.com/romlaor/radix for http routing.
 type node struct {
-	key   []byte
-	route []byte
-	param bool
-	leaf  bool
-	value HandlerFunc
-	edges edges
+	key     []byte
+	route   []byte
+	param   bool
+	leaf    bool
+	value   HandlerFunc
+	edges   edges
+	allowed methodFlag
 }
 
 // insert inserts a new key value pair into the tree.
-func (n *node) insert(key []byte, value HandlerFunc) {
+func (n *node) insert(key []byte, value HandlerFunc, flags methodFlag) {
 	// validate params
 	params := countParams(key)
 	if params != 0 {
@@ -106,11 +107,12 @@ func (n *node) insert(key []byte, value HandlerFunc) {
 			current.edges = current.edges.add(edge{
 				label: firstChar,
 				node: &node{
-					key:   key,
-					route: insKeyFull,
-					value: value,
-					param: countParams(key) != 0,
-					leaf:  true,
+					key:     key,
+					route:   insKeyFull,
+					value:   value,
+					param:   countParams(key) != 0,
+					leaf:    true,
+					allowed: flags,
 				},
 			})
 			return
@@ -141,12 +143,13 @@ func (n *node) insert(key []byte, value HandlerFunc) {
 
 		// partial, split and update node
 		splitNode := &node{
-			key:   child.key[prefixLen:],
-			value: child.value,
-			route: child.route,
-			param: child.param,
-			leaf:  child.leaf,
-			edges: child.edges,
+			key:     child.key[prefixLen:],
+			value:   child.value,
+			route:   child.route,
+			param:   child.param,
+			leaf:    child.leaf,
+			edges:   child.edges,
+			allowed: child.allowed,
 		}
 
 		// update child node
@@ -165,11 +168,12 @@ func (n *node) insert(key []byte, value HandlerFunc) {
 			child.edges = child.edges.add(edge{
 				label: key[prefixLen:][0],
 				node: &node{
-					key:   key[prefixLen:],
-					route: insKeyFull,
-					value: value,
-					param: countParams(key[prefixLen:]) != 0,
-					leaf:  true,
+					key:     key[prefixLen:],
+					route:   insKeyFull,
+					value:   value,
+					param:   countParams(key[prefixLen:]) != 0,
+					leaf:    true,
+					allowed: flags,
 				},
 			})
 		} else {
@@ -177,6 +181,7 @@ func (n *node) insert(key []byte, value HandlerFunc) {
 			child.route = insKeyFull
 			child.value = value
 			child.leaf = true
+			child.allowed = flags
 		}
 		return
 	}
@@ -253,6 +258,35 @@ func (n *node) search(key []byte, r *http.Request) (HandlerFunc, bool) {
 	}
 
 	return current.value, current.leaf
+}
+
+// getNode returns the node for the provided key.
+//
+// If no node is found, it returns nil.
+func (n *node) getNode(key []byte) *node {
+	current := n
+	keyLen := len(key)
+	for keyLen > 0 {
+		firstChar := key[0]
+		child, ok := current.edges.get(firstChar)
+		if !ok {
+			// no node found.
+			return nil
+		}
+
+		// check full match
+		cKeyLen := len(child.key)
+		if keyLen >= cKeyLen && prefixLength(key[:cKeyLen], child.key) == cKeyLen {
+			key = key[cKeyLen:]
+			keyLen -= cKeyLen
+			current = child
+			continue
+		}
+
+		break
+	}
+
+	return current
 }
 
 // print recursively prints the tree nodes.
@@ -360,10 +394,10 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 
 		// grab the path value
 		if lenPath > 0 {
-			// Extend buf to avoid bounds checks.
+			// extend buf to avoid bounds checks.
 			path = append(make([]byte, 0, len(path)+1), path...)
 
-			// Insert leading "/"
+			// insert leading "/"
 			var zero byte
 			path = append(path, zero)
 			copy(path[j+1:], path[j:])

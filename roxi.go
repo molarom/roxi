@@ -285,7 +285,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// handle OPTIONS requests in compliance with RFC 7231.
+	// handle OPTIONS requests.
 	if r.Method == http.MethodOptions {
 		if allow := m.allowed(r.Method, path); allow != "" {
 			w.Header().Set("Allow", allow)
@@ -294,14 +294,6 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			} else {
 				w.WriteHeader(http.StatusOK)
 			}
-			return
-		}
-	}
-
-	if m.optionsHandler != nil {
-		if allow := m.allowed(r.Method, path); allow != "" {
-			w.Header().Set("Allow", allow)
-			m.optionsHandler.ServeHTTP(w, r)
 			return
 		}
 	}
@@ -319,26 +311,29 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Mux) allowed(rMethod string, path []byte) string {
-	allowed := make([]string, 0, 9)
-	if m.optionsHandler != nil {
-		allowed = append(allowed, http.MethodOptions)
-	}
-	for method, t := range m.trees {
+	var allowed methodFlag
+
+	for method, tree := range m.trees {
 		if method == rMethod {
 			continue
 		}
-		if _, ok := t.search(path, nil); ok {
-			allowed = append(allowed, method)
+		if n := tree.getNode(path); n != nil {
+			// early return since this is handled at registration.
+			allowed |= n.allowed
+			break
 		}
 	}
-	// always include OPTIONS if any method is registered.
-	if len(allowed) > 0 && rMethod == http.MethodOptions {
-		allowed = append(allowed, http.MethodOptions)
+
+	// include OPTIONS if it's not the requested method.
+	if allowed != 0 && rMethod != http.MethodOptions {
+		allowed |= OPTIONS
+		return allowed.String()
 	}
 
-	if len(allowed) != 0 {
-		return strings.Join(allowed, ", ")
+	if allowed != 0 {
+		return allowed.String()
 	}
+
 	return ""
 }
 
@@ -395,11 +390,21 @@ func (m *Mux) Handle(method, path string, handlerFunc HandlerFunc, mw ...Middlew
 	handlerFunc = MiddlewareStack(handlerFunc, m.mw...)
 	handlerFunc = MiddlewareStack(handlerFunc, mw...)
 
+	bPath := toBytes(path)
 	if m.routeCaseInsensitive {
-		root.insert(toBytes(strings.ToLower(path)), handlerFunc)
-	} else {
-		root.insert(toBytes(path), handlerFunc)
+		bPath = toBytes(strings.ToLower(path))
 	}
+
+	// cache allowed methods
+	var allowed methodFlag
+	for method, tree := range m.trees {
+		if n := tree.getNode(bPath); n != nil {
+			n.allowed |= httpMethods[method]
+			allowed |= n.allowed
+		}
+	}
+
+	root.insert(bPath, handlerFunc, httpMethods[method])
 }
 
 // ----------------------------------------------------------------------

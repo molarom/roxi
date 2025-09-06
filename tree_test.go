@@ -202,14 +202,14 @@ func Test_Tree(t *testing.T) {
 	tree := &node{}
 
 	// preload with some routes.
-	tree.insert([]byte("/"), emptyHandler)
-	tree.insert([]byte("/home/:sub/:path"), emptyHandler)
-	tree.insert([]byte("/lib/books/:book"), emptyHandler)
-	tree.insert([]byte("/users/add/:user_id"), emptyHandler)
-	tree.insert([]byte("/:path"), emptyHandler)
-	tree.insert([]byte("/users/:id/app"), emptyHandler)
-	tree.insert([]byte("/users/:id/settings"), emptyHandler)
-	tree.insert([]byte("/users/:id/show"), emptyHandler)
+	tree.insert([]byte("/"), emptyHandler, GET)
+	tree.insert([]byte("/home/:sub/:path"), emptyHandler, GET)
+	tree.insert([]byte("/lib/books/:book"), emptyHandler, GET)
+	tree.insert([]byte("/users/add/:user_id"), emptyHandler, GET)
+	tree.insert([]byte("/:path"), emptyHandler, GET)
+	tree.insert([]byte("/users/:id/app"), emptyHandler, GET)
+	tree.insert([]byte("/users/:id/settings"), emptyHandler, GET)
+	tree.insert([]byte("/users/:id/show"), emptyHandler, GET)
 
 	// Inserts
 
@@ -255,7 +255,7 @@ func Test_Tree(t *testing.T) {
 				}
 			}()
 
-			tree.insert([]byte(tt.path), emptyHandler)
+			tree.insert([]byte(tt.path), emptyHandler, GET)
 		})
 	}
 
@@ -372,7 +372,7 @@ func Test_Tree(t *testing.T) {
 	for _, tt := range singleRouteTests {
 		t.Run(fmt.Sprintf("SingleRoute-%s", tt.name), func(t *testing.T) {
 			tree := &node{}
-			tree.insert([]byte(tt.wcPath), emptyHandler)
+			tree.insert([]byte(tt.wcPath), emptyHandler, GET)
 			if _, ok := tree.search([]byte(tt.path), &http.Request{}); ok != tt.ok {
 				t.Errorf("expected: [%v]; got [%v]", tt.ok, ok)
 				tree.print(0)
