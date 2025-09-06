@@ -336,16 +336,29 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 	lenB := len(b)
 	lenPath := len(path)
 
+	// handle empty wildcard match
 	if lenPath == 0 {
-		if !isWildCard(b, 0, lenB) && !isWildCard(b, 1, lenB) {
+		paramStart := 0
+		switch {
+		case isWildCard(b, 0, lenB):
+			paramStart++
+		case isWildCard(b, 1, lenB):
+			paramStart += 2
+		default:
 			return 0, false
 		}
+		paramName := b[paramStart:lenB]
+
+		r.SetPathValue(toString(paramName), "/")
+
+		return 0, true
 	}
 
 	i, j := 0, 0
 	for i < lenB && j < lenPath {
 		char := b[i]
-		// Check for param token
+
+		// check for param token
 		if char == ':' {
 			paramStart := i + 1
 			paramEnd := paramStart
@@ -386,27 +399,20 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 
 	// wildcard is the unlikely case, so check this last.
 	if isWildCard(b, i, lenB) {
-		param, _, _ := pathSegment(b, i+1, lenB)
+		paramStart := i + 1
+		paramEnd := lenB
 
-		// early return for simple lookups
-		if r == nil {
-			return j, true
-		}
+		if r != nil && j < lenPath {
+			paramName := toString(b[paramStart:paramEnd])
 
-		// grab the path value
-		if lenPath > 0 {
+			// grab the path value
 			wcValue := make([]byte, 1+lenPath-j)
 			wcValue[0] = '/'
 			copy(wcValue[1:], path[j:])
-			r.SetPathValue(toString(param), toString(wcValue))
-		} else {
-			r.SetPathValue(toString(param), "/")
+			r.SetPathValue(paramName, toString(wcValue))
 		}
 
-		if lenPath != 0 {
-			return lenPath - 1, true
-		}
-		return 0, true
+		return lenPath - 1, true
 	}
 
 	// not at the end, return if chars are different.
@@ -414,24 +420,6 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 		return 0, (path[0] == b[0] && lenPath-1 != 0)
 	}
 	return j, (path[j-1] == b[i-1] && lenPath-1 != j-1)
-}
-
-func pathSegment(b []byte, start, length int) ([]byte, int, bool) {
-	if length == 0 || start >= length {
-		return nil, -1, false
-	}
-
-	end := start
-	for ; end < length; end++ {
-		switch b[end] {
-		case '/':
-			return b[start:end], end, true
-		case '*', ':':
-			return nil, -1, false
-		}
-	}
-
-	return b[start:end], end, true
 }
 
 func validateParams(b []byte, total int) error {
@@ -499,4 +487,22 @@ func countParams(b []byte) (count int) {
 		}
 	}
 	return count
+}
+
+func pathSegment(b []byte, start, length int) ([]byte, int, bool) {
+	if length == 0 || start >= length {
+		return nil, -1, false
+	}
+
+	end := start
+	for ; end < length; end++ {
+		switch b[end] {
+		case '/':
+			return b[start:end], end, true
+		case '*', ':':
+			return nil, -1, false
+		}
+	}
+
+	return b[start:end], end, true
 }
