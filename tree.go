@@ -56,7 +56,7 @@ func (e edges) binarySearch(n int, label byte) int {
 	i, j := 0, n
 	for i < j {
 		h := int(uint(i+j) >> 1) // #nosec G115
-		if !(e[h].label >= label) {
+		if e[h].label < label {
 			i = h + 1
 		} else {
 			j = h

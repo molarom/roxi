@@ -20,7 +20,8 @@ enable = [
 [[linters.exclusions.rules]]
 linters = [
   'perfsprint',
-  'usestdlibvars'
+  'usestdlibvars',
+  'errcheck'
 ]
 path = '_test\.go'
 

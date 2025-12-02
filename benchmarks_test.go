@@ -2,7 +2,6 @@ package roxi
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -186,24 +185,6 @@ func Benchmark_Parallel(b *testing.B) {
 			}
 		})
 	}
-}
-
-// ----------------------------------------------------------------------
-// Responders
-
-type bytesResp []byte
-
-func (r bytesResp) Response() ([]byte, string, error) {
-	return r, "text/html; charset=utf-8", nil
-}
-
-type jsonResp struct {
-	Status string `json:"status"`
-}
-
-func (r jsonResp) Response() ([]byte, string, error) {
-	data, err := json.Marshal(r)
-	return data, "application/json; charset=utf-8", err
 }
 
 // ----------------------------------------------------------------------

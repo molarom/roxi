@@ -10,7 +10,7 @@ import (
 )
 
 func Index(ctx context.Context, r *http.Request) error {
-	http.Redirect(roxi.GetWriter(ctx), r, "/home", 301)
+	http.Redirect(roxi.GetWriter(ctx), r, "/home", http.StatusMovedPermanently)
 	return nil
 }
 

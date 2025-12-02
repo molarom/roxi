@@ -165,7 +165,7 @@ func ExampleWithPanicHandler() {
 	// Panic handler that returns the stack in the response
 	ph := func(ctx context.Context, r *http.Request, err interface{}) {
 		w := roxi.GetWriter(ctx)
-		fmt.Println(w, err, debug.Stack())
+		fmt.Println(w, err, string(debug.Stack()))
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 
