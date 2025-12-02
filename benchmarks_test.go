@@ -57,7 +57,7 @@ func Test_MuxRoutingAllocs(t *testing.T) {
 		mux.GET(r, func(ctx context.Context, r *http.Request) error { return nil })
 	}
 
-	w := newMockResponseWriter()
+	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/", nil)
 	u := req.URL
 	q := req.URL.RawQuery
@@ -144,27 +144,15 @@ func Benchmark_Mux(b *testing.B) {
 		},
 		{
 			"OptionsAllMethods",
-			buildMux(allbutPOST{}, WithOptionsHandler(DefaultCORS)),
+			buildMux(allbutPOST{}, WithOptionsHandler(optHandler)),
 			http.MethodPost,
-			"/path",
-		},
-		{
-			"RespondBytes",
-			buildMux(bRespRoute{}),
-			http.MethodGet,
-			"/path",
-		},
-		{
-			"RespondJSON",
-			buildMux(jsonRespRoute{}),
-			http.MethodGet,
 			"/path",
 		},
 	}
 
 	for _, tt := range muxes {
 		r, _ := http.NewRequest(tt.method, tt.path, nil)
-		w := newMockResponseWriter()
+		w := httptest.NewRecorder()
 		b.Run(tt.name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				tt.mux.ServeHTTP(w, r)
@@ -231,22 +219,6 @@ type paramsRoute struct{}
 
 func (r paramsRoute) Add(mux *Mux) {
 	mux.GET("/path/:foo/:bar/:baz/:qux/:quux", func(ctx context.Context, r *http.Request) error { return nil })
-}
-
-type bRespRoute struct{}
-
-func (r bRespRoute) Add(mux *Mux) {
-	mux.GET("/path", func(ctx context.Context, r *http.Request) error {
-		return Respond(ctx, bytesResp("ok"))
-	})
-}
-
-type jsonRespRoute struct{}
-
-func (r jsonRespRoute) Add(mux *Mux) {
-	mux.GET("/path", func(ctx context.Context, r *http.Request) error {
-		return Respond(ctx, jsonResp{"ok"})
-	})
 }
 
 type manyRoutes struct{}

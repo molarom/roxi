@@ -2,6 +2,7 @@ package roxi
 
 import (
 	"context"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -10,7 +11,7 @@ func Test_ContextValue(t *testing.T) {
 
 	ctx := context.WithValue(context.Background(), testKey(1), "test")
 
-	ctx = &writerContext{ctx, newMockResponseWriter()}
+	ctx = &writerContext{ctx, httptest.NewRecorder()}
 
 	v, ok := ctx.Value(testKey(1)).(string)
 	if !ok {

@@ -22,7 +22,8 @@ import (
 func Example_wildcards() {
 	// HandlerFunc for route registration.
 	h := func(ctx context.Context, r *http.Request) error {
-		return roxi.Respond(ctx, roxi.NoContent)
+		roxi.GetWriter(ctx).WriteHeader(204)
+		return nil
 	}
 
 	// Create the mux.
@@ -89,23 +90,21 @@ func ExampleWithMiddleware() {
 
 	// Simple HandlerFunc
 	mux.GET("/", func(ctx context.Context, r *http.Request) error {
-		return roxi.Respond(ctx, roxi.NoContent)
+		roxi.GetWriter(ctx).WriteHeader(204)
+		return nil
 	})
 
 	log.Fatal(http.ListenAndServe(":8080", mux))
 }
 
 func ExampleWithOptionsHandler() {
-	// Setup CORS
-	cors := roxi.CORS{
-		Origins: []string{"your.domain"},
-		Headers: []string{"Authorization"},
-		Methods: []string{"GET"},
+	optHandler := func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("OK"))
 	}
 
 	// Create new mux with options handler.
 	mux := roxi.New(
-		roxi.WithOptionsHandler(cors.HandlerFunc()),
+		roxi.WithOptionsHandler(http.HandlerFunc(optHandler)),
 	)
 
 	log.Fatal(http.ListenAndServe(":8080", mux))
@@ -115,7 +114,8 @@ func ExampleWithCaseInsensitiveRouting() {
 	mux := roxi.New(roxi.WithCaseInsensitiveRouting())
 
 	mux.GET("/foo", func(ctx context.Context, r *http.Request) error {
-		return roxi.Respond(ctx, roxi.NoContent)
+		roxi.GetWriter(ctx).WriteHeader(204)
+		return nil
 	})
 
 	r, _ := http.NewRequest("GET", "/FOO", nil)
@@ -131,7 +131,8 @@ func ExampleWithRedirectTrailingSlash() {
 	mux := roxi.New(roxi.WithRedirectTrailingSlash())
 
 	mux.GET("/foo", func(ctx context.Context, r *http.Request) error {
-		return roxi.Respond(ctx, roxi.NoContent)
+		roxi.GetWriter(ctx).WriteHeader(204)
+		return nil
 	})
 
 	r, _ := http.NewRequest("GET", "/foo/", nil)
@@ -147,7 +148,8 @@ func ExampleWithRedirectCleanPath() {
 	mux := roxi.New(roxi.WithRedirectCleanPath())
 
 	mux.GET("/foo", func(ctx context.Context, r *http.Request) error {
-		return roxi.Respond(ctx, roxi.NoContent)
+		roxi.GetWriter(ctx).WriteHeader(204)
+		return nil
 	})
 
 	r, _ := http.NewRequest("GET", "/..//..///foo", nil)

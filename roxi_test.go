@@ -14,6 +14,10 @@ import (
 	"testing"
 )
 
+var optHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(204)
+})
+
 // ----------------------------------------------------------------------
 // Tests
 
@@ -29,7 +33,7 @@ func Test_Mux(t *testing.T) {
 		return fmt.Errorf("failed to get path value")
 	})
 
-	w := newMockResponseWriter()
+	w := httptest.NewRecorder()
 	r, _ := http.NewRequest("GET", "/user/12", nil)
 
 	mux.ServeHTTP(w, r)
@@ -76,7 +80,7 @@ func Test_HTTPHandlerFunc(t *testing.T) {
 		}
 	})
 
-	w := newMockResponseWriter()
+	w := httptest.NewRecorder()
 	r, _ := http.NewRequest("GET", "/user/12", nil)
 
 	mux.ServeHTTP(w, r)
@@ -90,7 +94,8 @@ func Test_Subrouting(t *testing.T) {
 	v1 := New()
 
 	v1.GET("/accounts", func(ctx context.Context, r *http.Request) error {
-		return Respond(ctx, NoContent)
+		GetWriter(ctx).WriteHeader(204)
+		return nil
 	})
 
 	mux := New()
@@ -111,7 +116,8 @@ func Test_MuxMethods(t *testing.T) {
 
 	for k := range httpMethods {
 		mux.Handle(k, "/"+k, func(ctx context.Context, r *http.Request) error {
-			return Respond(ctx, NoContent)
+			GetWriter(ctx).WriteHeader(204)
+			return nil
 		})
 
 		w := httptest.NewRecorder()
@@ -171,7 +177,8 @@ func Test_RedirectTrailingSlash(t *testing.T) {
 	mux := New(WithRedirectTrailingSlash())
 
 	mux.GET("/redirect", func(ctx context.Context, r *http.Request) error {
-		return Respond(ctx, NoContent)
+		GetWriter(ctx).WriteHeader(204)
+		return nil
 	})
 
 	r, _ := http.NewRequest("GET", "/redirect/", nil)
@@ -187,7 +194,8 @@ func Test_CaseInsensitveRouting(t *testing.T) {
 	mux := New(WithCaseInsensitiveRouting())
 
 	mux.GET("/foo", func(ctx context.Context, r *http.Request) error {
-		return Respond(ctx, NoContent)
+		GetWriter(ctx).WriteHeader(204)
+		return nil
 	})
 
 	r, _ := http.NewRequest("GET", "/FOO", nil)
@@ -200,7 +208,7 @@ func Test_CaseInsensitveRouting(t *testing.T) {
 }
 
 func Test_OptionsHandler(t *testing.T) {
-	mux := New(WithOptionsHandler(DefaultCORS))
+	mux := New(WithOptionsHandler(optHandler))
 
 	mux.GET("/unused", func(ctx context.Context, r *http.Request) error {
 		return InternalServerError(ctx, r)
@@ -239,7 +247,7 @@ func Test_MethodNotAllowed(t *testing.T) {
 
 func Test_SetAllowHeaderWithOptions(t *testing.T) {
 	mux := New(
-		WithOptionsHandler(DefaultCORS),
+		WithOptionsHandler(optHandler),
 	)
 
 	mux.GET("/unused", func(ctx context.Context, r *http.Request) error {
@@ -263,7 +271,8 @@ func Test_SetRequestPattern(t *testing.T) {
 	mux := New()
 
 	mux.GET("/foo", func(ctx context.Context, r *http.Request) error {
-		return Respond(ctx, NoContent)
+		GetWriter(ctx).WriteHeader(204)
+		return nil
 	})
 
 	r, _ := http.NewRequest("GET", "/foo", nil)
@@ -286,7 +295,8 @@ func Test_Middleware(t *testing.T) {
 
 	mux := New(WithMiddleware(mw))
 	mux.GET("/middleware", func(ctx context.Context, r *http.Request) error {
-		return Respond(ctx, NoContent)
+		GetWriter(ctx).WriteHeader(204)
+		return nil
 	})
 
 	r, _ := http.NewRequest("GET", "/middleware", nil)
@@ -302,7 +312,8 @@ func Test_RedirectCleanPath(t *testing.T) {
 	mux := New(WithRedirectCleanPath())
 
 	mux.GET("/redirect", func(ctx context.Context, r *http.Request) error {
-		return Respond(ctx, NoContent)
+		GetWriter(ctx).WriteHeader(204)
+		return nil
 	})
 
 	r, _ := http.NewRequest("GET", "/../../redirect", nil)
@@ -388,7 +399,8 @@ func Test_FileServer(t *testing.T) {
 func Test_WildcardHandler(t *testing.T) {
 	mux := NewWithDefaults()
 	mux.GET("/*path", func(ctx context.Context, r *http.Request) error {
-		return Respond(ctx, NoContent)
+		GetWriter(ctx).WriteHeader(204)
+		return nil
 	})
 
 	tests := []struct {

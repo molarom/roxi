@@ -15,9 +15,6 @@ func Index(ctx context.Context, r *http.Request) error {
 }
 
 func Welcome(ctx context.Context, r *http.Request) error {
-	// Error handling is optional here since we're writing directly to the writer,
-	// but the mux will still log the error to help with further troubleshooting if
-	// one is returned.
 	if _, err := fmt.Fprintf(roxi.GetWriter(ctx), "Welcome!"); err != nil {
 		return err
 	}
