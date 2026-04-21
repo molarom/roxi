@@ -13,15 +13,12 @@ The aim was to have a mux that meets the following requirements:
 5.  Be as performant and memory efficent as possible.
 6.  Integrate well with net/http.
 
-There are some additional methods included in this package that may optionally be used to improve developer experience, such as Bind and Respond for handling request
-and response data respectively. These components were inspired by [Bill Kennedy's Service project](https://github.com/ardanlabs/service).
-
 ## Quick Start
 
 ### Install
 
 ```bash
-go get gitlab.com/romalor/roxi@v1.0.0
+go get gitlab.com/romalor/roxi/v2
 ```
 
 ### Example
