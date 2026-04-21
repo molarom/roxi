@@ -12,7 +12,7 @@ import (
 	"os"
 	"runtime/debug"
 
-	"gitlab.com/romalor/roxi"
+	"gitlab.com/romalor/roxi/v2"
 )
 
 // ----------------------------------------------------------------------

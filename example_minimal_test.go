@@ -6,7 +6,7 @@ import (
 	"log"
 	"net/http"
 
-	"gitlab.com/romalor/roxi"
+	"gitlab.com/romalor/roxi/v2"
 )
 
 func Index(ctx context.Context, r *http.Request) error {
