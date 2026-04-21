@@ -1,7 +1,7 @@
 deps:
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.5
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.11.3
 
-lint: 
+lint:
 	golangci-lint run
 
 test:
