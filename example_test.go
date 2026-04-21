@@ -11,7 +11,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"runtime/debug"
-	"time"
 
 	"gitlab.com/romalor/roxi"
 )
@@ -64,38 +63,6 @@ func Example_wildcards() {
 
 // ----------------------------------------------------------------------
 // Mux Options
-
-func ExampleWithMiddleware() {
-	// Simple logging middleware
-	mw := func(next roxi.HandlerFunc) roxi.HandlerFunc {
-		return func(ctx context.Context, r *http.Request) error {
-			before := time.Now()
-			log.Print("time before:", before)
-
-			if err := next(ctx, r); err != nil {
-				return err
-			}
-
-			after := time.Since(before)
-			log.Print("time after:", after)
-
-			return nil
-		}
-	}
-
-	// Create mux and register middleware
-	mux := roxi.New(
-		roxi.WithMiddleware(mw),
-	)
-
-	// Simple HandlerFunc
-	mux.GET("/", func(ctx context.Context, r *http.Request) error {
-		roxi.GetWriter(ctx).WriteHeader(204)
-		return nil
-	})
-
-	log.Fatal(http.ListenAndServe(":8080", mux))
-}
 
 func ExampleWithOptionsHandler() {
 	optHandler := func(w http.ResponseWriter, r *http.Request) {

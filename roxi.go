@@ -77,7 +77,6 @@ func (f HandlerFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // HTTP requests.
 type Mux struct {
 	trees   map[string]*node
-	mw      []MiddlewareFunc
 	ctxPool sync.Pool
 
 	// Routing
@@ -141,16 +140,6 @@ func NewWithDefaults(opts ...func(*Mux)) *Mux {
 
 // ----------------------------------------------------------------------
 // Mux options
-
-// WithMiddleware registers global middleware for the mux to execute.
-//
-// Middleware registered directly with the mux will execute prior to
-// any middleware registered with HandlerFuncs.
-func WithMiddleware(mw ...MiddlewareFunc) func(*Mux) {
-	return func(m *Mux) {
-		m.mw = mw
-	}
-}
 
 // WithPanicHandler enables panic recovery in the mux and registers a PanicHandler
 // that executes if a panic occurs during the lifecycle of the mux.
@@ -339,27 +328,27 @@ func (m *Mux) allowed(rMethod string, path []byte) string {
 
 // Handler registers an http.Handler to handle requests at the given
 // method and path.
-func (m *Mux) Handler(method, path string, handler http.Handler, mw ...MiddlewareFunc) {
+func (m *Mux) Handler(method, path string, handler http.Handler) {
 	m.Handle(method, path, func(ctx context.Context, r *http.Request) error {
 		handler.ServeHTTP(GetWriter(ctx), r)
 		return nil
-	}, mw...)
+	})
 }
 
 // HandlerFunc registers an http.HandlerFunc to handle requests at the given
 // method and path.
-func (m *Mux) HandlerFunc(method, path string, handler http.HandlerFunc, mw ...MiddlewareFunc) {
+func (m *Mux) HandlerFunc(method, path string, handler http.HandlerFunc) {
 	m.Handle(method, path, func(ctx context.Context, r *http.Request) error {
 		handler.ServeHTTP(GetWriter(ctx), r)
 		return nil
-	}, mw...)
+	})
 }
 
 // Handle registers a HandlerFunc to handle requests at the given
 // method and path.
 //
 // Handle only allows standard HTTP methods provided by net/http.
-func (m *Mux) Handle(method, path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc) {
+func (m *Mux) Handle(method, path string, handlerFunc HandlerFunc) {
 	if method == "" {
 		panic("method cannot be empty")
 	}
@@ -387,9 +376,6 @@ func (m *Mux) Handle(method, path string, handlerFunc HandlerFunc, mw ...Middlew
 		m.trees[method] = root
 	}
 
-	handlerFunc = MiddlewareStack(handlerFunc, m.mw...)
-	handlerFunc = MiddlewareStack(handlerFunc, mw...)
-
 	bPath := toBytes(path)
 	if m.routeCaseInsensitive {
 		bPath = toBytes(strings.ToLower(path))
@@ -413,7 +399,7 @@ func (m *Mux) Handle(method, path string, handlerFunc HandlerFunc, mw ...Middlew
 // FileServer wraps http.FileServer to serve files from the provided http.FileSystem.
 //
 // The path must end in a wildcard with the name '*file'.
-func (m *Mux) FileServer(path string, fs http.FileSystem, mw ...MiddlewareFunc) {
+func (m *Mux) FileServer(path string, fs http.FileSystem) {
 	// check path
 	if err := checkFSPath(path); err != nil {
 		panic(err)
@@ -424,7 +410,7 @@ func (m *Mux) FileServer(path string, fs http.FileSystem, mw ...MiddlewareFunc) 
 		r.URL.Path = r.PathValue("file")
 		fsrv.ServeHTTP(GetWriter(ctx), r)
 		return nil
-	}, mw...)
+	})
 }
 
 func checkFSPath(path string) error {
@@ -446,39 +432,39 @@ func checkFSPath(path string) error {
 // ----------------------------------------------------------------------
 // Helper methods
 
-// GET is a helper method for m.Handle("GET", path, handlerFunc, mw...)
-func (m *Mux) GET(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc) {
-	m.Handle(http.MethodGet, path, handlerFunc, mw...)
+// GET is a helper method for m.Handle("GET", path, handlerFunc)
+func (m *Mux) GET(path string, handlerFunc HandlerFunc) {
+	m.Handle(http.MethodGet, path, handlerFunc)
 }
 
-// HEAD is a helper method for m.Handle("HEAD", path, handlerFunc, mw...)
-func (m *Mux) HEAD(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc) {
-	m.Handle(http.MethodHead, path, handlerFunc, mw...)
+// HEAD is a helper method for m.Handle("HEAD", path, handlerFunc)
+func (m *Mux) HEAD(path string, handlerFunc HandlerFunc) {
+	m.Handle(http.MethodHead, path, handlerFunc)
 }
 
-// POST is a helper method for m.Handle("POST", path, handlerFunc, mw...)
-func (m *Mux) POST(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc) {
-	m.Handle(http.MethodPost, path, handlerFunc, mw...)
+// POST is a helper method for m.Handle("POST", path, handlerFunc)
+func (m *Mux) POST(path string, handlerFunc HandlerFunc) {
+	m.Handle(http.MethodPost, path, handlerFunc)
 }
 
-// PUT is a helper method for m.Handle("PUT", path, handlerFunc, mw...)
-func (m *Mux) PUT(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc) {
-	m.Handle(http.MethodPut, path, handlerFunc, mw...)
+// PUT is a helper method for m.Handle("PUT", path, handlerFunc)
+func (m *Mux) PUT(path string, handlerFunc HandlerFunc) {
+	m.Handle(http.MethodPut, path, handlerFunc)
 }
 
-// PATCH is a helper method for m.Handle("PATCH", path, handlerFunc, mw...)
-func (m *Mux) PATCH(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc) {
-	m.Handle(http.MethodPatch, path, handlerFunc, mw...)
+// PATCH is a helper method for m.Handle("PATCH", path, handlerFunc)
+func (m *Mux) PATCH(path string, handlerFunc HandlerFunc) {
+	m.Handle(http.MethodPatch, path, handlerFunc)
 }
 
-// DELETE is a helper method for m.Handle("DELETE", path, handlerFunc, mw...)
-func (m *Mux) DELETE(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc) {
-	m.Handle(http.MethodDelete, path, handlerFunc, mw...)
+// DELETE is a helper method for m.Handle("DELETE", path, handlerFunc)
+func (m *Mux) DELETE(path string, handlerFunc HandlerFunc) {
+	m.Handle(http.MethodDelete, path, handlerFunc)
 }
 
-// OPTIONS is a helper method for m.Handle("OPTIONS", path, handlerFunc, mw...)
-func (m *Mux) OPTIONS(path string, handlerFunc HandlerFunc, mw ...MiddlewareFunc) {
-	m.Handle(http.MethodOptions, path, handlerFunc, mw...)
+// OPTIONS is a helper method for m.Handle("OPTIONS", path, handlerFunc)
+func (m *Mux) OPTIONS(path string, handlerFunc HandlerFunc) {
+	m.Handle(http.MethodOptions, path, handlerFunc)
 }
 
 // ----------------------------------------------------------------------

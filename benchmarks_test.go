@@ -94,30 +94,6 @@ func Benchmark_Mux(b *testing.B) {
 			"/v1/path/path",
 		},
 		{
-			"SingleWithMiddleware",
-			buildMux(singleRoute{}, WithMiddleware(mw("1"))),
-			http.MethodGet,
-			"/path",
-		},
-		{
-			"ManyWithMiddleware",
-			buildMux(manyRoutes{}, WithMiddleware(mw("1"))),
-			http.MethodGet,
-			"/v1/path/path",
-		},
-		{
-			"SingleWithManyMiddleware",
-			buildMux(singleRoute{}, WithMiddleware(mw("1"), mw("2"), mw("3"), mw("4"))),
-			http.MethodGet,
-			"/path",
-		},
-		{
-			"ManyWithManyMiddleware",
-			buildMux(manyRoutes{}, WithMiddleware(mw("1"), mw("2"), mw("3"), mw("4"))),
-			http.MethodGet,
-			"/v1/path/path",
-		},
-		{
 			"Params",
 			buildMux(paramsRoute{}),
 			http.MethodGet,
@@ -169,10 +145,6 @@ func Benchmark_Parallel(b *testing.B) {
 			"Many",
 			buildMux(manyRoutes{}),
 		},
-		{
-			"ManyWithManyMiddleware",
-			buildMux(manyRoutes{}, WithMiddleware(mw("1"), mw("2"), mw("3"), mw("4"))),
-		},
 	}
 
 	for _, tt := range muxes {
@@ -217,18 +189,6 @@ func (r allbutPOST) Add(mux *Mux) {
 	for v := range httpMethods {
 		if v != "POST" {
 			mux.Handle(v, "/path", func(ctx context.Context, r *http.Request) error { return nil })
-		}
-	}
-}
-
-// ----------------------------------------------------------------------
-// Middleware
-
-func mw(value string) MiddlewareFunc {
-	return func(handle HandlerFunc) HandlerFunc {
-		return func(ctx context.Context, r *http.Request) error {
-			_, _ = fmt.Fprintf(GetWriter(ctx), "%s", value)
-			return nil
 		}
 	}
 }

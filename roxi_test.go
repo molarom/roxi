@@ -284,30 +284,6 @@ func Test_SetRequestPattern(t *testing.T) {
 	}
 }
 
-func Test_Middleware(t *testing.T) {
-	middleware := false
-	mw := func(next HandlerFunc) HandlerFunc {
-		return func(ctx context.Context, r *http.Request) error {
-			middleware = true
-			return next(ctx, r)
-		}
-	}
-
-	mux := New(WithMiddleware(mw))
-	mux.GET("/middleware", func(ctx context.Context, r *http.Request) error {
-		GetWriter(ctx).WriteHeader(204)
-		return nil
-	})
-
-	r, _ := http.NewRequest("GET", "/middleware", nil)
-	w := httptest.NewRecorder()
-
-	mux.ServeHTTP(w, r)
-	if !middleware {
-		t.Error("middleware failed to execute")
-	}
-}
-
 func Test_RedirectCleanPath(t *testing.T) {
 	mux := New(WithRedirectCleanPath())
 
