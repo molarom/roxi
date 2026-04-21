@@ -432,37 +432,37 @@ func checkFSPath(path string) error {
 // ----------------------------------------------------------------------
 // Helper methods
 
-// GET is a helper method for m.Handle("GET", path, handlerFunc)
+// GET is a helper method for m.Handle("GET", path, handlerFunc).
 func (m *Mux) GET(path string, handlerFunc HandlerFunc) {
 	m.Handle(http.MethodGet, path, handlerFunc)
 }
 
-// HEAD is a helper method for m.Handle("HEAD", path, handlerFunc)
+// HEAD is a helper method for m.Handle("HEAD", path, handlerFunc).
 func (m *Mux) HEAD(path string, handlerFunc HandlerFunc) {
 	m.Handle(http.MethodHead, path, handlerFunc)
 }
 
-// POST is a helper method for m.Handle("POST", path, handlerFunc)
+// POST is a helper method for m.Handle("POST", path, handlerFunc).
 func (m *Mux) POST(path string, handlerFunc HandlerFunc) {
 	m.Handle(http.MethodPost, path, handlerFunc)
 }
 
-// PUT is a helper method for m.Handle("PUT", path, handlerFunc)
+// PUT is a helper method for m.Handle("PUT", path, handlerFunc).
 func (m *Mux) PUT(path string, handlerFunc HandlerFunc) {
 	m.Handle(http.MethodPut, path, handlerFunc)
 }
 
-// PATCH is a helper method for m.Handle("PATCH", path, handlerFunc)
+// PATCH is a helper method for m.Handle("PATCH", path, handlerFunc).
 func (m *Mux) PATCH(path string, handlerFunc HandlerFunc) {
 	m.Handle(http.MethodPatch, path, handlerFunc)
 }
 
-// DELETE is a helper method for m.Handle("DELETE", path, handlerFunc)
+// DELETE is a helper method for m.Handle("DELETE", path, handlerFunc).
 func (m *Mux) DELETE(path string, handlerFunc HandlerFunc) {
 	m.Handle(http.MethodDelete, path, handlerFunc)
 }
 
-// OPTIONS is a helper method for m.Handle("OPTIONS", path, handlerFunc)
+// OPTIONS is a helper method for m.Handle("OPTIONS", path, handlerFunc).
 func (m *Mux) OPTIONS(path string, handlerFunc HandlerFunc) {
 	m.Handle(http.MethodOptions, path, handlerFunc)
 }
