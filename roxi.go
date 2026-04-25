@@ -9,7 +9,6 @@
 package roxi
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -76,8 +75,7 @@ func (f HandlerFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Mux represents an http.Handler for registering HandlerFuncs to handle
 // HTTP requests.
 type Mux struct {
-	trees   map[string]*node
-	ctxPool sync.Pool
+	trees map[string]*node
 
 	// Routing
 	routeCaseInsensitive bool
@@ -108,11 +106,6 @@ func New(opts ...func(*Mux)) *Mux {
 		notFound:         HandlerFunc(NotFound),
 		errHandler:       HandlerFunc(InternalServerError),
 		panicHandler:     DefaultPanicHandler,
-		ctxPool: sync.Pool{
-			New: func() any {
-				return new(writerContext)
-			},
-		},
 	}
 
 	for _, o := range opts {
@@ -238,7 +231,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// don't redirect if proxy connection or root path are requested.
-		if r.Method != http.MethodConnect && !bytes.Equal(path, []byte{'/'}) {
+		if r.Method != http.MethodConnect && (len(path) != 1 || path[0] != '/') {
 			// following the same redirect behavior as httprouter
 			code := http.StatusMovedPermanently
 			if r.Method != http.MethodGet {
@@ -275,19 +268,13 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// handle OPTIONS requests.
-	if r.Method == http.MethodOptions {
+	if r.Method == http.MethodOptions && m.optionsHandler != nil {
 		if allow := m.allowed(r.Method, path); allow != "" {
 			w.Header().Set("Allow", allow)
-			if m.optionsHandler != nil {
-				m.optionsHandler.ServeHTTP(w, r)
-			} else {
-				w.WriteHeader(http.StatusOK)
-			}
+			m.optionsHandler.ServeHTTP(w, r)
 			return
 		}
-	}
-
-	if m.methodNotAllowed != nil {
+	} else if m.methodNotAllowed != nil {
 		if allow := m.allowed(r.Method, path); allow != "" {
 			w.Header().Set("Allow", allow)
 			m.methodNotAllowed.ServeHTTP(w, r)
@@ -296,7 +283,11 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// not found case.
-	m.notFound.ServeHTTP(w, r)
+	if m.notFound != nil {
+		m.notFound.ServeHTTP(w, r)
+	} else {
+		http.NotFound(w, r)
+	}
 }
 
 func (m *Mux) allowed(rMethod string, path []byte) string {

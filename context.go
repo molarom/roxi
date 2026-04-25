@@ -32,6 +32,11 @@ func GetWriter(ctx context.Context) http.ResponseWriter {
 	if v, ok := ctx.(*writerContext); ok {
 		return v.value
 	}
+	return getWriterFallback(ctx)
+}
+
+//go:noinline
+func getWriterFallback(ctx context.Context) http.ResponseWriter {
 	if v, ok := ctx.Value(writerKey).(http.ResponseWriter); ok {
 		return v
 	}
