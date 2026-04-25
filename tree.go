@@ -237,9 +237,9 @@ func (n *node) search(key []byte, r *http.Request) (HandlerFunc, bool) {
 			}
 
 			current = child
-			if len(child.edges) != 0 && lastIdx < keyLen {
-				key = key[lastIdx:]
-				keyLen -= lastIdx
+			if len(child.edges) != 0 && prefixLen+lastIdx < keyLen {
+				key = key[prefixLen+lastIdx:]
+				keyLen -= prefixLen + lastIdx
 				continue
 			}
 

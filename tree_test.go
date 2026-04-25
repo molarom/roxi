@@ -381,4 +381,53 @@ func Test_Tree(t *testing.T) {
 	}
 
 	tree.print(0)
+
+	// ----------------------------------------------------------------------
+	// Shared param prefix regression
+
+	sharedParamTests := []struct {
+		name   string
+		path   string
+		params []string
+		found  bool
+	}{
+		{
+			"MatchStart",
+			"/auth/oidc/okta/start",
+			[]string{"provider"},
+			true,
+		},
+		{
+			"MatchCallback",
+			"/auth/oidc/google/callback",
+			[]string{"provider"},
+			true,
+		},
+		{
+			"NoMatchIncomplete",
+			"/auth/oidc/okta",
+			[]string{},
+			false,
+		},
+	}
+
+	sharedTree := &node{}
+	sharedTree.insert([]byte("/auth/oidc/:provider/start"), emptyHandler, GET)
+	sharedTree.insert([]byte("/auth/oidc/:provider/callback"), emptyHandler, GET)
+
+	for _, tt := range sharedParamTests {
+		t.Run(fmt.Sprintf("SharedParam-%s", tt.name), func(t *testing.T) {
+			req := &http.Request{}
+			if _, ok := sharedTree.search([]byte(tt.path), req); ok != tt.found {
+				t.Errorf("expected: [%v]; got: [%v]", tt.found, ok)
+				sharedTree.print(0)
+			}
+
+			for _, v := range tt.params {
+				if pv := req.PathValue(v); pv == "" {
+					t.Errorf("expected path value [%s] to be set", v)
+				}
+			}
+		})
+	}
 }
