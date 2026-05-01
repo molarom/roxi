@@ -237,9 +237,14 @@ func (n *node) search(key []byte, r *http.Request) (HandlerFunc, bool) {
 			}
 
 			current = child
-			if len(child.edges) != 0 && prefixLen+lastIdx < keyLen {
-				key = key[prefixLen+lastIdx:]
-				keyLen -= prefixLen + lastIdx
+			consumedLen := prefixLen + lastIdx
+			key = key[consumedLen:]
+			keyLen -= consumedLen
+			if keyLen > 0 {
+				if len(child.edges) == 0 {
+					// path has unmatched remainder and no edges, not a match.
+					return current.value, false
+				}
 				continue
 			}
 
@@ -247,9 +252,8 @@ func (n *node) search(key []byte, r *http.Request) (HandlerFunc, bool) {
 		break
 	}
 
-	// if we didn't land on a param and the
-	// key hasn't been exhausted, it's not a match.
-	if !current.param && keyLen != 0 {
+	// if the key hasn't been fully consumed, it's not a match.
+	if keyLen != 0 {
 		return current.value, false
 	}
 
@@ -355,6 +359,7 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 	}
 
 	i, j := 0, 0
+	lastWasParam := false
 	for i < lenB && j < lenPath {
 		char := b[i]
 
@@ -379,6 +384,7 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 			}
 
 			i, j = paramEnd, valueEnd
+			lastWasParam = true
 			continue
 		}
 
@@ -386,6 +392,7 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 		if char == path[j] {
 			i++
 			j++
+			lastWasParam = false
 			continue
 		}
 
@@ -394,6 +401,11 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 
 	// reached the end, early return
 	if i == lenB && j == lenPath {
+		return j, true
+	}
+
+	// b is fully consumed by a trailing param, attempt to match against child edges.
+	if i == lenB && lastWasParam {
 		return j, true
 	}
 
@@ -412,7 +424,8 @@ func parseParams(b []byte, path []byte, r *http.Request) (int, bool) {
 			r.SetPathValue(paramName, toString(wcValue))
 		}
 
-		return lenPath - 1, true
+		// wildcards consume the rest of the path.
+		return lenPath, true
 	}
 
 	// not at the end, return if chars are different.

@@ -44,12 +44,12 @@ func Test_ParseParams(t *testing.T) {
 			false,
 		},
 		{
-			"MismatchedNoLeadingSlash",
+			"TrailingParamWithRemainder",
 			":path",
 			"foo/bar",
-			[]string{},
+			[]string{"path"},
 			3,
-			false,
+			true,
 		},
 		{
 			"MatchNoLeadingSlash",
@@ -80,7 +80,7 @@ func Test_ParseParams(t *testing.T) {
 			"/path/*wildcard",
 			"/path/single",
 			[]string{"wildcard"},
-			11,
+			12,
 			true,
 		},
 		{
@@ -88,7 +88,7 @@ func Test_ParseParams(t *testing.T) {
 			"/path/*wildcard",
 			"/path" + strings.Repeat("/path", 80),
 			[]string{"wildcard"},
-			404,
+			405,
 			true,
 		},
 		{
@@ -429,5 +429,57 @@ func Test_Tree(t *testing.T) {
 				}
 			}
 		})
+	}
+
+	// ----------------------------------------------------------------------
+	// Trailing parent param regression
+
+	parentParamTests := []struct {
+		name   string
+		path   string
+		params []string
+		found  bool
+	}{
+		{"MatchParent", "/orgs/abc", []string{"id"}, true},
+		{"MatchChild", "/orgs/abc/items", []string{"id"}, true},
+		{"MatchGrandchild", "/orgs/abc/items/xyz", []string{"id", "item_id"}, true},
+		{"NoChildRoute", "/orgs/abc/missing", []string{}, false},
+		{"NoGrandchildRoute", "/orgs/abc/items/xyz/missing", []string{}, false},
+	}
+
+	for _, order := range []struct {
+		name   string
+		routes []string
+	}{
+		{"ParentFirst", []string{
+			"/orgs/:id",
+			"/orgs/:id/items",
+			"/orgs/:id/items/:item_id",
+		}},
+		{"ParentLast", []string{
+			"/orgs/:id/items/:item_id",
+			"/orgs/:id/items",
+			"/orgs/:id",
+		}},
+	} {
+		tree := &node{}
+		for _, r := range order.routes {
+			tree.insert([]byte(r), emptyHandler, GET)
+		}
+
+		for _, tt := range parentParamTests {
+			t.Run(fmt.Sprintf("ParentParam-%s-%s", order.name, tt.name), func(t *testing.T) {
+				req := &http.Request{}
+				if _, ok := tree.search([]byte(tt.path), req); ok != tt.found {
+					t.Errorf("expected: [%v]; got: [%v]", tt.found, ok)
+					tree.print(0)
+				}
+				for _, v := range tt.params {
+					if pv := req.PathValue(v); pv == "" {
+						t.Errorf("expected path value [%s] to be set", v)
+					}
+				}
+			})
+		}
 	}
 }
